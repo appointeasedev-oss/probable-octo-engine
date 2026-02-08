@@ -2,8 +2,9 @@ import os
 import random
 import requests
 import re
+import json
 
-EXAMPLE_FILE = "example.py"
+ARAS_ROOT = "ARAS"
 LOG_DIR = "logs"
 COUNTER_FILE = "counter.txt"
 
@@ -41,17 +42,19 @@ def call_openrouter(prompt):
             )
             if resp.status_code == 200:
                 return resp.json()
-            else:
-                print(f"Key failed ({resp.status_code}), trying next key...")
-        except Exception as e:
-            print(f"Exception with key: {e}, trying next key...")
+        except Exception:
+            pass
     raise RuntimeError("All OpenRouter keys failed")
 
 def ensure_files():
     os.makedirs(LOG_DIR, exist_ok=True)
-    if not os.path.exists(EXAMPLE_FILE):
-        with open(EXAMPLE_FILE, "w") as f:
-            f.write("# example.py - basic calculator\n")
+    os.makedirs(ARAS_ROOT, exist_ok=True)
+
+    main_file = os.path.join(ARAS_ROOT, "main.py")
+    if not os.path.exists(main_file):
+        with open(main_file, "w") as f:
+            f.write("# ARAS main entry\n")
+
     if not os.path.exists(COUNTER_FILE):
         with open(COUNTER_FILE, "w") as f:
             f.write("0")
@@ -66,90 +69,93 @@ def increment_counter():
         f.write(str(count))
     return count
 
-def read_example():
-    with open(EXAMPLE_FILE, "r") as f:
-        return f.read()
+def read_workspace():
+    workspace = {}
+    for root, dirs, files in os.walk(ARAS_ROOT):
+        for file in files:
+            path = os.path.join(root, file)
+            rel = os.path.relpath(path, ARAS_ROOT)
+            with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                workspace[rel] = f.read()
+    return workspace
 
-def write_example(content):
-    with open(EXAMPLE_FILE, "w") as f:
-        f.write(content)
+def apply_operations(ops):
+    for op in ops:
+        action = op["action"]
+        path = os.path.normpath(os.path.join(ARAS_ROOT, op["path"]))
+
+        if not path.startswith(os.path.abspath(ARAS_ROOT)):
+            continue
+
+        if action == "create_dir":
+            os.makedirs(path, exist_ok=True)
+
+        elif action == "write_file":
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(op["content"])
 
 def parse_previous_logs():
-    """Extract previous improvements from all logs to avoid repeats"""
     improvements_done = set()
     if not os.path.exists(LOG_DIR):
         return improvements_done
-    logs = sorted(os.listdir(LOG_DIR))
-    for log_file in logs:
-        path = os.path.join(LOG_DIR, log_file)
-        with open(path, "r") as f:
+    for log in os.listdir(LOG_DIR):
+        with open(os.path.join(LOG_DIR, log), "r") as f:
             text = f.read()
-            # Extract improvements done from previous logs
             matches = re.findall(r"- Improvements done: (.+)", text)
             for m in matches:
                 improvements_done.add(m.strip())
     return improvements_done
 
 def write_log(counter, summary):
-    log_file = os.path.join(LOG_DIR, f"log_{counter}.txt")
-    with open(log_file, "w") as f:
+    with open(os.path.join(LOG_DIR, f"log_{counter}.txt"), "w") as f:
         f.write(summary)
-
-def extract_summary(ai_response):
-    """
-    Extract only the summary section from the AI response.
-    Assumes AI includes '**Summary:**' section.
-    """
-    text = ai_response['choices'][0]['message']['content']
-    summary_index = text.find("**Summary:**")
-    if summary_index != -1:
-        return text[summary_index:]
-    # fallback: return last 20 lines
-    return "\n".join(text.splitlines()[-20:])
 
 # -------- Brain Logic --------
 def main():
     ensure_files()
     counter = increment_counter()
-    current_code = read_example()
+
+    workspace = read_workspace()
     previous_improvements = parse_previous_logs()
 
     prompt = f"""
-You are an AI assistant improving Python code.
-Current code:
-{current_code}
+You are Sparrow, an autonomous coding agent Your pourpous is to improve ARAS AI make it advance.
+
+You control ONLY the ARAS directory.
+You may:
+- Create files
+- Edit files
+- Create subfolders
+
+Current ARAS workspace (JSON):
+{json.dumps(workspace, indent=2)}
 
 Previous improvements (do not repeat):
 {previous_improvements}
 
-Return the full improved Python code, and include a clear summary section starting with '**Summary:**' listing:
-- Improvements done
-- Next improvements to consider
+Respond ONLY in valid JSON with this structure:
+
+{{
+  "operations": [
+    {{
+      "action": "create_dir" | "write_file",
+      "path": "relative/path/from/ARAS",
+      "content": "file content if write_file"
+    }}
+  ],
+  "summary": "**Summary:**\\n- Improvements done: ...\\n- Next improvements to consider: ..."
+}}
 """
 
-    try:
-        response = call_openrouter(prompt)
-        # Extract improved code and summary
-        ai_text = response['choices'][0]['message']['content']
+    response = call_openrouter(prompt)
+    ai_text = response["choices"][0]["message"]["content"]
 
-        # Split code and summary
-        summary_start = ai_text.find("**Summary:**")
-        if summary_start != -1:
-            new_code = ai_text[:summary_start].strip()
-            summary = ai_text[summary_start:].strip()
-        else:
-            new_code = ai_text
-            summary = "**Summary:** No summary provided."
+    result = json.loads(ai_text)
+    apply_operations(result["operations"])
+    write_log(counter, result["summary"])
 
-        # Save improved code
-        write_example(new_code)
-
-        # Save summary in separate log file
-        write_log(counter, summary)
-
-        print(f"Run {counter} complete. example.py updated. Log saved as log_{counter}.txt")
-    except Exception as e:
-        print(f"Brain run failed: {e}")
+    print(f"ARAS run {counter} complete.")
 
 if __name__ == "__main__":
     main()
