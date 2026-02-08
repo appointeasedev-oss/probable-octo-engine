@@ -1,0 +1,16 @@
+**Summary:**
+- **Improvements done:**
+  - Added `re` and `random` imports for future enhancements and response variety
+  - Added `strip()` to clean input and handle empty strings
+  - Created a `responses` dictionary to store multiple possible responses for greetings and unknown inputs
+  - Used `random.choice()` to vary responses and make interactions feel more natural
+  - Improved name extraction logic to handle cases where no name is provided after "my name is"
+  - Added input validation to skip empty inputs
+  - Used consistent variable naming and comments for clarity
+
+- **Next improvements to consider:**
+  - Implement pattern matching with regular expressions for more flexible input handling
+  - Add more response categories and context-aware replies
+  - Introduce a learning mechanism to remember user preferences or past interactions
+  - Expand functionality with additional commands or features
+  - Add logging for debugging and tracking user interactions
