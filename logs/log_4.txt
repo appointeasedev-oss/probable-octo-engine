@@ -1,0 +1,14 @@
+**Summary:**
+
+**Improvements done:**
+- Added `is_number` utility function to check if a value is a number (int or float).
+- Added `validate_number` utility function to validate that a value is a number, raising a `TypeError` if not.
+- Added `safe_divide` function to return `None` instead of raising an error when dividing by zero.
+- Added `safe_modulo` function to return `None` instead of raising an error when performing modulo by zero.
+
+**Next improvements to consider:**
+- Add more advanced mathematical operations (e.g., square root, logarithm, trigonometric functions).
+- Implement input validation for all functions to ensure arguments are numbers.
+- Add support for complex numbers.
+- Include unit tests to verify the correctness of the functions.
+- Optimize performance for large-scale computations.
