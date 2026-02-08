@@ -115,7 +115,7 @@ def main():
     previous_improvements = parse_previous_logs()
 
     prompt = f"""
-You are an AI assistant improving Python code make it in a way when file ran it make a AI chatbot that answer user.
+You are an AI assistant improving Python code make it in a way when file ran it make a AI chatbot that answer user.keep advancing it alwas improve it to make it better 
 Current code:
 {current_code}
 
