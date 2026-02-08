@@ -5,22 +5,26 @@ import datetime
 import re
 import string
 import os
+from typing import Optional, List, Dict
 
 # Helper functions for better modularity and testability
-def is_greeting(text):
+def is_greeting(text: str) -> bool:
     greetings = ["hi", "hello", "hey", "greetings", "howdy"]
-    return re.search(r'\b(' + '|'.join(greetings) + r')\b', text)
+    return re.search(r'\b(' + '|'.join(greetings) + r')\b', text) is not None
 
-def is_farewell(text):
+def is_farewell(text: str) -> bool:
     farewells = ["bye", "exit", "quit", "goodbye", "see you"]
-    return re.search(r'\b(' + '|'.join(farewells) + r')\b', text)
+    return re.search(r'\b(' + '|'.join(farewells) + r')\b', text) is not None
 
-def extract_name(text):
-    match = re.search(r'my name is (\w+)', text)
+def extract_name(text: str) -> Optional[str]:
+    match = re.search(r'my name is (\w+)', text, re.IGNORECASE)
     return match.group(1).title() if match else None
 
-def contains_any(text, phrases):
-    return any(q in text for q in phrases)
+def contains_any(text: str, phrases: List[str]) -> bool:
+    return any(q.lower() in text for q in phrases)
+
+def contains_all(text: str, phrases: List[str]) -> bool:
+    return all(q.lower() in text for q in phrases)
 
 # Predefined responses
 responses = {
@@ -42,7 +46,7 @@ responses = {
 }
 
 # Load the AI model
-def load_model():
+def load_model() -> Optional:
     try:
         from transformers import pipeline
         model = pipeline("conversational", model="microsoft/DialoGPT-medium")
@@ -51,26 +55,35 @@ def load_model():
         print("Warning: transformers library not found. AI features will be disabled.")
         return None
 
+def get_time_response() -> str:
+    current_time = datetime.datetime.now().strftime("%H:%M")
+    return f"ARAS: The current time is {current_time}."
+
+def get_name_response(name: str) -> str:
+    return f"ARAS: You are {name}." if name else "ARAS: I don't know your name yet."
+
 def aras():
     print("👋 Hello! I am ARAS (A Really Awesome System).")
     name = ""
     model = load_model()
 
     if model:
-        conversation = []
+        conversation: List[Dict[str, str]] = []
         print("ARAS: AI mode enabled! I can now have more natural conversations.")
     else:
         conversation = None
 
     while True:
-        user = input("You: ").lower().strip()
-        if not user:
+        user_input = input("You: ").strip()
+        if not user_input:
             print("ARAS: Please type something.")
             continue
 
+        user_text = user_input.lower()
+
         # AI-powered conversation (if model available)
         if model and conversation is not None:
-            conversation.append({"role": "user", "content": user})
+            conversation.append({"role": "user", "content": user_input})
             response = model(conversation, max_length=100, pad_token_id=1)
             bot_response = response[0]['generated_text']
             print(f"ARAS: {bot_response}")
@@ -78,34 +91,30 @@ def aras():
             continue
 
         # Greeting detection
-        if is_greeting(user):
+        if is_greeting(user_text):
             print(f"ARAS: {random.choice(responses['greeting'])}")
 
         # Name introduction
-        elif contains_any(user, ["your name", "who are you", "what's your name"]):
+        elif contains_any(user_text, ["your name", "who are you", "what's your name"]):
             print(f"ARAS: {random.choice(responses['name_introduction'])}")
 
         # Name extraction
-        elif (extracted_name := extract_name(user)) is not None:
+        elif (extracted_name := extract_name(user_input)) is not None:
             name = extracted_name
             print(f"ARAS: Nice to meet you, {name}!")
 
         # Identity questions
-        elif contains_any(user, ["who am i", "what's my name", "do you know my name"]):
-            if name:
-                print(f"ARAS: You are {name}.")
-            else:
-                print("ARAS: I don't know your name yet.")
+        elif contains_any(user_text, ["who am i", "what's my name", "do you know my name"]):
+            print(get_name_response(name))
 
         # Farewell
-        elif is_farewell(user):
+        elif is_farewell(user_text):
             print("ARAS: Goodbye! Have a great day 🚀")
             break
 
         # Time query
-        elif "time" in user:
-            current_time = datetime.datetime.now().strftime("%H:%M")
-            print(f"ARAS: The current time is {current_time}.")
+        elif "time" in user_text:
+            print(get_time_response())
 
         # Default response
         else:
