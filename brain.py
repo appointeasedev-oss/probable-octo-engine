@@ -3,10 +3,12 @@ import random
 import requests
 from datetime import datetime
 
+# -------- Config --------
 EXAMPLE_FILE = "example.py"
 LOG_DIR = "logs"
 COUNTER_FILE = "counter.txt"
 
+# Load all keys from env
 OPENROUTER_KEYS = [
     os.getenv("OPENROUTER_KEY_1"),
     os.getenv("OPENROUTER_KEY_2"),
@@ -15,6 +17,9 @@ OPENROUTER_KEYS = [
     os.getenv("OPENROUTER_KEY_5"),
 ]
 
+MODEL_NAME = "arcee-ai/trinity-large-preview:free"
+
+# -------- Helpers --------
 def rotate_keys():
     keys = [k for k in OPENROUTER_KEYS if k]
     random.shuffle(keys)
@@ -25,7 +30,7 @@ def call_openrouter(prompt):
     for key in keys:
         headers = {"Authorization": f"Bearer {key}"}
         data = {
-            "model": "qwen/qwen-3-coder:free",
+            "model": MODEL_NAME,
             "messages": [{"role": "user", "content": prompt}],
         }
         try:
@@ -33,7 +38,7 @@ def call_openrouter(prompt):
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers=headers,
                 json=data,
-                timeout=30
+                timeout=60
             )
             if resp.status_code == 200:
                 return resp.json()
@@ -78,11 +83,12 @@ def last_log_content():
     with open(last_file, "r") as f:
         return f.read()
 
-def write_log(counter, improvement_text):
+def write_log(counter, content):
     log_file = os.path.join(LOG_DIR, f"log_{counter}.txt")
     with open(log_file, "w") as f:
-        f.write(improvement_text)
+        f.write(content)
 
+# -------- Brain Logic --------
 def main():
     ensure_files()
     counter = increment_counter()
@@ -91,27 +97,22 @@ def main():
 
     prompt = f"""
 You are an AI code assistant.
-Analyze this Python code and improve it intelligently.
-Use previous log notes to continue improvement without repeating the same changes.
-Return full improved Python code and a summary of:
-1. Improvements done
-2. Next improvements to consider
-
-Previous log (if any):
+Improve this Python code intelligently for correctness, readability, and functionality.
+Do not repeat previous improvements.
+Include a summary in the response: Improvements Done, Next Improvements.
+Previous log:
 {previous_log}
-
 Current code:
 {current_code}
+Return ONLY the full improved Python code along with your summary at the end.
 """
 
     try:
         response = call_openrouter(prompt)
         new_code = response['choices'][0]['message']['content']
 
-        # Split the response dynamically: last line can contain next steps
-        # For simplicity, we log the entire response as dynamic thoughts
         write_example(new_code)
-        write_log(counter, response['choices'][0]['message']['content'])
+        write_log(counter, new_code)
 
         print(f"Run {counter} complete. example.py updated.")
     except Exception as e:
