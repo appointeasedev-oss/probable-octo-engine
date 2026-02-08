@@ -1,9 +1,0 @@
-
-
-**Summary:**
-- **Improvements done:** Added error handling for division by zero to prevent runtime errors and improve robustness.
-- **Next improvements to consider:** 
-  - Add type hints for better code clarity and IDE support.
-  - Include input validation to ensure inputs are numeric.
-  - Add docstrings to document each function's purpose and parameters.
-  - Consider supporting additional operations (e.g., modulo, power).
