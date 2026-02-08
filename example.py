@@ -1,4 +1,4 @@
-```python
+<code>
 # ARAS - A Really Awesome System 🤖
 import random
 import datetime
@@ -13,11 +13,11 @@ from contextlib import contextmanager
 # Helper functions for better modularity and testability
 def is_greeting(text: str) -> bool:
     greetings = ["hi", "hello", "hey", "greetings", "howdy"]
-    return re.search(r'\b(' + '|'.join(greetings) + r')\b', text) is not None
+    return re.search(r'\b(' + '|'.join(greetings) + r')\b', text, re.IGNORECASE) is not None
 
 def is_farewell(text: str) -> bool:
     farewells = ["bye", "exit", "quit", "goodbye", "see you"]
-    return re.search(r'\b(' + '|'.join(farewells) + r')\b', text) is not None
+    return re.search(r'\b(' + '|'.join(farewells) + r')\b', text, re.IGNORECASE) is not None
 
 def extract_name(text: str) -> Optional[str]:
     match = re.search(r'my name is (\w+)', text, re.IGNORECASE)
@@ -144,4 +144,16 @@ def aras():
 # Start ARAS
 if __name__ == "__main__":
     aras()
-```
+</code>
+
+**Summary:**
+**Improvements done:**
+- Added `re.IGNORECASE` flag to regex searches in `is_greeting` and `is_farewell` functions for better case-insensitive matching
+- Minor code formatting improvements for consistency
+
+**Next improvements to consider:**
+- Add unit tests for helper functions
+- Implement conversation context persistence between sessions
+- Add more sophisticated NLP for intent recognition
+- Implement logging instead of print statements for better debugging
+- Add configuration file for customizable responses and behaviors
