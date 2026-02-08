@@ -7,8 +7,7 @@ EXAMPLE_FILE = "example.py"
 LOG_DIR = "logs"
 COUNTER_FILE = "counter.txt"
 
-# -------- Config --------
-# Environment keys
+# Load OpenRouter keys from env
 OPENROUTER_KEYS = [
     os.getenv("OPENROUTER_KEY_1"),
     os.getenv("OPENROUTER_KEY_2"),
@@ -17,22 +16,7 @@ OPENROUTER_KEYS = [
     os.getenv("OPENROUTER_KEY_5"),
 ]
 
-# List of models to try, in order
-MODELS = [
-    "openrouter/pony-alpha",
-    "stepfun/step-3.5-flash:free",
-    "liquid/lfm-2.5-1.2b-thinking:free",
-    "openai/gpt-oss-120b:free",
-    "z-ai/glm-4.5-air:free",
-    "qwen/qwen3-coder:free",
-    "tngtech/deepseek-r1t2-chimera:free",
-    "deepseek/deepseek-r1-0528:free",
-    "google/gemma-3n-e4b-it:free",
-    "tngtech/deepseek-r1t-chimera:free",
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "nousresearch/hermes-3-llama-3.1-405b:free",
-    "nvidia/nemotron-nano-12b-v2-vl:free"
-]
+MODEL_NAME = "arcee-ai/trinity-large-preview:free"
 
 # -------- Helpers --------
 def rotate_keys():
@@ -40,13 +24,12 @@ def rotate_keys():
     random.shuffle(keys)
     return keys
 
-def call_model(model_name, prompt):
-    """Try all keys for a single model"""
+def call_openrouter(prompt):
     keys = rotate_keys()
     for key in keys:
         headers = {"Authorization": f"Bearer {key}"}
         data = {
-            "model": model_name,
+            "model": MODEL_NAME,
             "messages": [{"role": "user", "content": prompt}],
         }
         try:
@@ -59,20 +42,10 @@ def call_model(model_name, prompt):
             if resp.status_code == 200:
                 return resp.json()
             else:
-                print(f"Model '{model_name}' failed with key ({resp.status_code}), trying next key...")
+                print(f"Key failed ({resp.status_code}), trying next key...")
         except Exception as e:
-            print(f"Exception with model '{model_name}': {e}, trying next key...")
-    return None  # All keys failed for this model
-
-def call_multi_model(prompt):
-    """Try all models in sequence until one succeeds"""
-    for model in MODELS:
-        print(f"Trying model: {model}")
-        response = call_model(model, prompt)
-        if response:
-            return response
-        print(f"Model '{model}' failed, moving to next model...")
-    raise RuntimeError("All models and keys failed")
+            print(f"Exception with key: {e}, trying next key...")
+    raise RuntimeError("All OpenRouter keys failed")
 
 def ensure_files():
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -102,6 +75,7 @@ def write_example(content):
         f.write(content)
 
 def parse_previous_logs():
+    """Extract previous improvements from all logs to avoid repeats"""
     improvements_done = set()
     if not os.path.exists(LOG_DIR):
         return improvements_done
@@ -110,6 +84,7 @@ def parse_previous_logs():
         path = os.path.join(LOG_DIR, log_file)
         with open(path, "r") as f:
             text = f.read()
+            # Extract improvements done from previous logs
             matches = re.findall(r"- Improvements done: (.+)", text)
             for m in matches:
                 improvements_done.add(m.strip())
@@ -119,6 +94,18 @@ def write_log(counter, summary):
     log_file = os.path.join(LOG_DIR, f"log_{counter}.txt")
     with open(log_file, "w") as f:
         f.write(summary)
+
+def extract_summary(ai_response):
+    """
+    Extract only the summary section from the AI response.
+    Assumes AI includes '**Summary:**' section.
+    """
+    text = ai_response['choices'][0]['message']['content']
+    summary_index = text.find("**Summary:**")
+    if summary_index != -1:
+        return text[summary_index:]
+    # fallback: return last 20 lines
+    return "\n".join(text.splitlines()[-20:])
 
 # -------- Brain Logic --------
 def main():
@@ -141,9 +128,11 @@ Return the full improved Python code, and include a clear summary section starti
 """
 
     try:
-        response = call_multi_model(prompt)
+        response = call_openrouter(prompt)
+        # Extract improved code and summary
         ai_text = response['choices'][0]['message']['content']
 
+        # Split code and summary
         summary_start = ai_text.find("**Summary:**")
         if summary_start != -1:
             new_code = ai_text[:summary_start].strip()
@@ -152,7 +141,10 @@ Return the full improved Python code, and include a clear summary section starti
             new_code = ai_text
             summary = "**Summary:** No summary provided."
 
+        # Save improved code
         write_example(new_code)
+
+        # Save summary in separate log file
         write_log(counter, summary)
 
         print(f"Run {counter} complete. example.py updated. Log saved as log_{counter}.txt")
