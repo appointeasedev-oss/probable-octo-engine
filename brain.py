@@ -3,7 +3,7 @@ import random
 import requests
 import re
 
-EXAMPLE_FILE = "ARAS/main.py"
+EXAMPLE_FILE = "main.py"
 LOG_DIR = "logs"
 COUNTER_FILE = "counter.txt"
 
