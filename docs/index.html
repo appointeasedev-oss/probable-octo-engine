@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ARAS Brain Dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="dashboard">
+      <header>
+        <h1>ARAS Brain Dashboard</h1>
+        <p class="subtitle">Self-improvement tracking for ARAS and brain runs.</p>
+      </header>
+
+      <section class="panel">
+        <h2>Latest Run</h2>
+        <div id="latest-run" class="console-block">Loading...</div>
+      </section>
+
+      <section class="panel">
+        <h2>Run Success Trend</h2>
+        <canvas id="success-chart" width="800" height="240"></canvas>
+        <p class="hint">Green = verification passed, Red = failed.</p>
+      </section>
+
+      <section class="panel">
+        <h2>Run History</h2>
+        <ul id="run-list" class="console-list"></ul>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

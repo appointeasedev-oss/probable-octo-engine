@@ -1,20 +1,13 @@
-```python
 # ARAS - A Really Awesome System 🤖
 import random
 import datetime
 import re
-import string
-import os
 from typing import Optional, List, Dict
-import threading
-import queue
-from contextlib import contextmanager
 import logging
 from pathlib import Path
 import json
-import hashlib
 import sqlite3
-from transformers import pipeline, Conversation, ConversationManager
+from transformers import pipeline, Conversation
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -35,8 +28,23 @@ def extract_name(text: str) -> Optional[str]:
 def contains_any(text: str, phrases: List[str]) -> bool:
     return any(q.lower() in text for q in phrases)
 
-def contains_all(text: str, phrases: List[str]) -> bool:
-    return all(q.lower() in text for q in phrases)
+def is_self_harm_related(text: str) -> bool:
+    self_harm_phrases = [
+        "suicide",
+        "kill myself",
+        "end my life",
+        "self harm",
+        "self-harm",
+        "hurt myself",
+    ]
+    return contains_any(text, self_harm_phrases)
+
+def get_self_harm_response() -> str:
+    return (
+        "ARAS: I'm really sorry you're feeling this way. You deserve support, and "
+        "I can't help with self-harm, but I can listen. If you feel at risk, please "
+        "reach out to someone you trust or a local support line in your country."
+    )
 
 # Load configuration for customizable responses
 def load_config() -> Dict:
@@ -89,10 +97,6 @@ def aras():
     print("👋 Hello! I am ARAS (A Really Awesome System).")
     name = ""
     model = load_model()
-    conversation_manager = ConversationManager() if model else None
-
-    # Conversation history for context
-    history = []
 
     # Initialize database for persistent memory
     conn = sqlite3.connect('aras_memory.db')
@@ -119,11 +123,16 @@ def aras():
 
         user_text = user_input.lower()
 
+        if is_self_harm_related(user_text):
+            response = get_self_harm_response()
+            print(response)
+            save_to_memory(user_input, response)
+            continue
+
         # AI-powered conversation (if model available)
-        if model and conversation_manager:
+        if model:
             conversation = Conversation(user_input)
-            conversation_manager.add_conversation(conversation)
-            response = model(conversation_manager, max_length=100, pad_token_id=1)
+            response = model(conversation, max_length=100, pad_token_id=1)
             bot_response = response[0]['generated_text']
             print(f"ARAS: {bot_response}")
             save_to_memory(user_input, bot_response)
@@ -177,4 +186,3 @@ def aras():
 # Start ARAS
 if __name__ == "__main__":
     aras()
-```

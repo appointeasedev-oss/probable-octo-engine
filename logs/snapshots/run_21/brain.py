@@ -1,4 +1,4 @@
-# Brain metadata: last_run=2026-02-08T16:21:42.788899
+# Brain metadata: last_run=2026-02-08T16:08:33.534492
 import json
 import os
 import random
@@ -16,7 +16,6 @@ ARAS_DIR = Path("ARAS")
 RESPONSES_PATH = ARAS_DIR / "responses.json"
 VERIFY_CASES_PATH = ARAS_DIR / "verify_cases.json"
 SKILLS_PATH = ARAS_DIR / "skills" / "notes.json"
-DATASET_DIR = Path("datasets")
 LOG_DIR = Path("logs")
 SNAPSHOT_DIR = LOG_DIR / "snapshots"
 STATE_PATH = LOG_DIR / "brain_state.json"
@@ -142,13 +141,12 @@ def generate_openrouter_improvement() -> Improvement | None:
         return None
     prompt = (
         "Return a JSON object with fields type and payload.\n"
-        "Allowed type values: response_variant, verify_case, skill_note, new_file, dataset_ingest.\n"
+        "Allowed type values: response_variant, verify_case, skill_note, new_file.\n"
         "Payload must match the type:\n"
         "- response_variant: {\"category\": \"greeting|name_introduction|unknown|farewell\", \"text\": \"...\"}\n"
         "- verify_case: {\"input\": \"...\", \"expected_contains\": \"...\"}\n"
         "- skill_note: {\"title\": \"...\", \"body\": \"...\"}\n"
         "- new_file: {\"relative_path\": \"ARAS/...\", \"content\": \"...\"}\n"
-        "- dataset_ingest: {\"url\": \"https://...\", \"filename\": \"optional\"}\n"
         "Respond with JSON only."
     )
     try:
@@ -162,7 +160,6 @@ def generate_openrouter_improvement() -> Improvement | None:
         "verify_case": "verify_case",
         "skill_note": "skill_note",
         "new_file": "new_file",
-        "dataset_ingest": "dataset_ingest",
     }
     improvement_type = type_map.get(data.get("type"))
     payload = data.get("payload")
@@ -267,26 +264,6 @@ def apply_new_file(payload: Dict[str, str]) -> str:
     return f"Created new file at {relative_path}."
 
 
-def apply_dataset_ingest(payload: Dict[str, str]) -> str:
-    url = payload.get("url")
-    if not url:
-        return "Dataset ingest skipped: missing url."
-    filename = payload.get("filename") or Path(url).name or "dataset.bin"
-    DATASET_DIR.mkdir(parents=True, exist_ok=True)
-    target_path = DATASET_DIR / filename
-    if target_path.exists():
-        return f"Dataset already present at {target_path}."
-    try:
-        req = request.Request(url, method="GET")
-        with request.urlopen(req, timeout=60) as response:
-            if response.status != 200:
-                return f"Dataset download failed with status {response.status}."
-            target_path.write_bytes(response.read())
-    except (error.URLError, error.HTTPError) as exc:
-        return f"Dataset download failed: {exc}."
-    return f"Downloaded dataset to {target_path}."
-
-
 def apply_improvement(improvement: Improvement) -> str:
     if improvement.kind == "response_variant":
         return apply_response_variant(improvement.payload)
@@ -296,8 +273,6 @@ def apply_improvement(improvement: Improvement) -> str:
         return apply_skill_note(improvement.payload)
     if improvement.kind == "new_file":
         return apply_new_file(improvement.payload)
-    if improvement.kind == "dataset_ingest":
-        return apply_dataset_ingest(improvement.payload)
     return "No improvement applied."
 
 

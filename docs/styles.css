@@ -1,0 +1,74 @@
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --text: #0b0b0b;
+  --muted: #5c5c5c;
+  --accent: #2f7d32;
+  --accent-soft: #e6f5e7;
+  --border: #d6d6d6;
+  font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.dashboard {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 32px 24px 60px;
+}
+
+header {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 16px;
+  margin-bottom: 24px;
+}
+
+h1 {
+  font-size: 28px;
+  margin: 0 0 8px;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--muted);
+}
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 24px;
+  background: #fafafa;
+}
+
+.console-block {
+  background: var(--accent-soft);
+  border: 1px dashed var(--accent);
+  padding: 16px;
+  border-radius: 6px;
+  white-space: pre-wrap;
+}
+
+.console-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.console-list li {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.console-list li:last-child {
+  border-bottom: none;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+}

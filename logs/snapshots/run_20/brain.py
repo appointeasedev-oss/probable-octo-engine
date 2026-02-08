@@ -1,7 +1,5 @@
-# Brain metadata: last_run=2026-02-08T16:21:42.788899
+# Brain metadata: last_run=2026-02-08T16:08:31.037154
 import json
-import os
-import random
 import shutil
 import subprocess
 import sys
@@ -10,13 +8,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
-from urllib import error, request
-
 ARAS_DIR = Path("ARAS")
 RESPONSES_PATH = ARAS_DIR / "responses.json"
 VERIFY_CASES_PATH = ARAS_DIR / "verify_cases.json"
 SKILLS_PATH = ARAS_DIR / "skills" / "notes.json"
-DATASET_DIR = Path("datasets")
 LOG_DIR = Path("logs")
 SNAPSHOT_DIR = LOG_DIR / "snapshots"
 STATE_PATH = LOG_DIR / "brain_state.json"
@@ -82,19 +77,6 @@ IMPROVEMENT_QUEUE: List[Improvement] = [
     ),
 ]
 
-OPENROUTER_KEYS = [
-    key
-    for key in [
-        os.getenv("OPENROUTER_KEY_1"),
-        os.getenv("OPENROUTER_KEY_2"),
-        os.getenv("OPENROUTER_KEY_3"),
-        os.getenv("OPENROUTER_KEY_4"),
-        os.getenv("OPENROUTER_KEY_5"),
-    ]
-    if key
-]
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "arcee-ai/trinity-large-preview:free")
-
 
 def load_json(path: Path, default):
     if path.exists():
@@ -107,72 +89,6 @@ def save_json(path: Path, data) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
         json.dump(data, handle, indent=2)
-
-
-def call_openrouter(prompt: str) -> str:
-    if not OPENROUTER_KEYS:
-        raise RuntimeError("No OpenRouter keys configured.")
-    keys = OPENROUTER_KEYS[:]
-    random.shuffle(keys)
-    for key in keys:
-        try:
-            payload = json.dumps(
-                {
-                    "model": OPENROUTER_MODEL,
-                    "messages": [{"role": "user", "content": prompt}],
-                }
-            ).encode("utf-8")
-            req = request.Request(
-                "https://openrouter.ai/api/v1/chat/completions",
-                data=payload,
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                method="POST",
-            )
-            with request.urlopen(req, timeout=60) as response:
-                if response.status == 200:
-                    data = json.loads(response.read().decode("utf-8"))
-                    return data["choices"][0]["message"]["content"]
-        except (error.URLError, error.HTTPError):
-            continue
-    raise RuntimeError("All OpenRouter keys failed.")
-
-
-def generate_openrouter_improvement() -> Improvement | None:
-    if not OPENROUTER_KEYS:
-        return None
-    prompt = (
-        "Return a JSON object with fields type and payload.\n"
-        "Allowed type values: response_variant, verify_case, skill_note, new_file, dataset_ingest.\n"
-        "Payload must match the type:\n"
-        "- response_variant: {\"category\": \"greeting|name_introduction|unknown|farewell\", \"text\": \"...\"}\n"
-        "- verify_case: {\"input\": \"...\", \"expected_contains\": \"...\"}\n"
-        "- skill_note: {\"title\": \"...\", \"body\": \"...\"}\n"
-        "- new_file: {\"relative_path\": \"ARAS/...\", \"content\": \"...\"}\n"
-        "- dataset_ingest: {\"url\": \"https://...\", \"filename\": \"optional\"}\n"
-        "Respond with JSON only."
-    )
-    try:
-        content = call_openrouter(prompt)
-        data = json.loads(content)
-    except (RuntimeError, json.JSONDecodeError):
-        return None
-
-    type_map = {
-        "response_variant": "response_variant",
-        "verify_case": "verify_case",
-        "skill_note": "skill_note",
-        "new_file": "new_file",
-        "dataset_ingest": "dataset_ingest",
-    }
-    improvement_type = type_map.get(data.get("type"))
-    payload = data.get("payload")
-    if not improvement_type or not isinstance(payload, dict):
-        return None
-    return Improvement(
-        identifier=f"openrouter_{improvement_type}",
-        kind=improvement_type,
-        payload=payload,
-    )
 
 
 def ensure_state() -> Dict[str, int]:
@@ -267,26 +183,6 @@ def apply_new_file(payload: Dict[str, str]) -> str:
     return f"Created new file at {relative_path}."
 
 
-def apply_dataset_ingest(payload: Dict[str, str]) -> str:
-    url = payload.get("url")
-    if not url:
-        return "Dataset ingest skipped: missing url."
-    filename = payload.get("filename") or Path(url).name or "dataset.bin"
-    DATASET_DIR.mkdir(parents=True, exist_ok=True)
-    target_path = DATASET_DIR / filename
-    if target_path.exists():
-        return f"Dataset already present at {target_path}."
-    try:
-        req = request.Request(url, method="GET")
-        with request.urlopen(req, timeout=60) as response:
-            if response.status != 200:
-                return f"Dataset download failed with status {response.status}."
-            target_path.write_bytes(response.read())
-    except (error.URLError, error.HTTPError) as exc:
-        return f"Dataset download failed: {exc}."
-    return f"Downloaded dataset to {target_path}."
-
-
 def apply_improvement(improvement: Improvement) -> str:
     if improvement.kind == "response_variant":
         return apply_response_variant(improvement.payload)
@@ -296,8 +192,6 @@ def apply_improvement(improvement: Improvement) -> str:
         return apply_skill_note(improvement.payload)
     if improvement.kind == "new_file":
         return apply_new_file(improvement.payload)
-    if improvement.kind == "dataset_ingest":
-        return apply_dataset_ingest(improvement.payload)
     return "No improvement applied."
 
 
@@ -339,9 +233,7 @@ def run_brain() -> None:
     counter = increment_counter()
     snapshot_sources(counter)
 
-    improvement = generate_openrouter_improvement()
-    if improvement is None:
-        improvement = IMPROVEMENT_QUEUE[state["next_index"] % len(IMPROVEMENT_QUEUE)]
+    improvement = IMPROVEMENT_QUEUE[state["next_index"] % len(IMPROVEMENT_QUEUE)]
     improvement_summary = apply_improvement(improvement)
 
     update_brain_metadata()

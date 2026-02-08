@@ -1,0 +1,20 @@
+{
+  "cases": [
+    {
+      "input": "hi",
+      "expected_contains": "Hello"
+    },
+    {
+      "input": "what's your name",
+      "expected_contains": "ARAS"
+    },
+    {
+      "input": "time",
+      "expected_contains": "current time"
+    },
+    {
+      "input": "bye",
+      "expected_contains": "Goodbye"
+    }
+  ]
+}

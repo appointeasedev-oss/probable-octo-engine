@@ -1,0 +1,36 @@
+name: ARAS Brain Run
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/7 * * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  brain-run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run brain
+        run: python brain.py
+
+      - name: Commit changes
+        run: |
+          if git status --porcelain | grep .; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "Brain run: apply next improvement"
+            git push
+          else
+            echo "No changes to commit."
+          fi
