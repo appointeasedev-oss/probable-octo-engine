@@ -2,15 +2,12 @@ import os
 import random
 import requests
 import re
-import subprocess
 
-# ----------------- Config -----------------
 EXAMPLE_FILE = "ARAS/main.py"
 LOG_DIR = "logs"
-ERROR_DIR = "error_runs"
 COUNTER_FILE = "counter.txt"
 
-# Load OpenRouter keys from environment variables
+# Load OpenRouter keys from env
 OPENROUTER_KEYS = [
     os.getenv("OPENROUTER_KEY_1"),
     os.getenv("OPENROUTER_KEY_2"),
@@ -52,11 +49,9 @@ def call_openrouter(prompt):
 
 def ensure_files():
     os.makedirs(LOG_DIR, exist_ok=True)
-    os.makedirs(ERROR_DIR, exist_ok=True)
     if not os.path.exists(EXAMPLE_FILE):
-        os.makedirs(os.path.dirname(EXAMPLE_FILE), exist_ok=True)
         with open(EXAMPLE_FILE, "w") as f:
-            f.write("# ARAS main.py starter code\n")
+            f.write("# example.py - basic calculator\n")
     if not os.path.exists(COUNTER_FILE):
         with open(COUNTER_FILE, "w") as f:
             f.write("0")
@@ -80,6 +75,7 @@ def write_example(content):
         f.write(content)
 
 def parse_previous_logs():
+    """Extract previous improvements from all logs to avoid repeats"""
     improvements_done = set()
     if not os.path.exists(LOG_DIR):
         return improvements_done
@@ -88,6 +84,7 @@ def parse_previous_logs():
         path = os.path.join(LOG_DIR, log_file)
         with open(path, "r") as f:
             text = f.read()
+            # Extract improvements done from previous logs
             matches = re.findall(r"- Improvements done: (.+)", text)
             for m in matches:
                 improvements_done.add(m.strip())
@@ -98,17 +95,17 @@ def write_log(counter, summary):
     with open(log_file, "w") as f:
         f.write(summary)
 
-def run_code():
-    try:
-        result = subprocess.run(
-            ["python", EXAMPLE_FILE],
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
-        return result.returncode, result.stdout, result.stderr
-    except Exception as e:
-        return 1, "", str(e)
+def extract_summary(ai_response):
+    """
+    Extract only the summary section from the AI response.
+    Assumes AI includes '**Summary:**' section.
+    """
+    text = ai_response['choices'][0]['message']['content']
+    summary_index = text.find("**Summary:**")
+    if summary_index != -1:
+        return text[summary_index:]
+    # fallback: return last 20 lines
+    return "\n".join(text.splitlines()[-20:])
 
 # -------- Brain Logic --------
 def main():
@@ -117,88 +114,42 @@ def main():
     current_code = read_example()
     previous_improvements = parse_previous_logs()
 
-    # ---- Initial AI improvement prompt ----
     prompt = f"""
-You are an AI assistant improving Python code. 
-Your task: 
-1. Improve this Python code into a working interactive chat program.
-2. Return only valid Python code. Do NOT include explanations, Markdown, quotes, or any text outside the Python code.
-3. At the very end of the file, include a '**Summary:**' section as a Python comment block, listing:
-   - Improvements done
-   - Next improvements to consider
-
+You are an AI assistant improving Python code make it in a way when run it opens a chat with user in loop answers.
 Current code:
 {current_code}
 
 Previous improvements (do not repeat):
 {previous_improvements}
+
+Return the full improved Python code, and include a clear summary section starting with '**Summary:**' listing:
+- Improvements done
+- Next improvements to consider
 """
 
     try:
         response = call_openrouter(prompt)
+        # Extract improved code and summary
         ai_text = response['choices'][0]['message']['content']
 
         # Split code and summary
         summary_start = ai_text.find("**Summary:**")
         if summary_start != -1:
-            new_code = ai_text[:summary_start].rstrip()
+            new_code = ai_text[:summary_start].strip()
             summary = ai_text[summary_start:].strip()
         else:
             new_code = ai_text
-            summary = "# **Summary:** No summary provided."
+            summary = "**Summary:** No summary provided."
 
+        # Save improved code
         write_example(new_code)
+
+        # Save summary in separate log file
         write_log(counter, summary)
-        print(f"Run {counter} complete. ARAS/main.py updated. Log saved as log_{counter}.txt")
 
-        # ---- Run + auto-fix loop ----
-        while True:
-            returncode, stdout, stderr = run_code()
-            if returncode == 0:
-                print("✅ ARAS/main.py runs without errors. Improvement successful!")
-                break
-            else:
-                # Save runtime error
-                error_log_file = os.path.join(ERROR_DIR, f"error_run_{counter}.txt")
-                with open(error_log_file, "w") as f:
-                    f.write(stderr)
-                print(f"❌ Runtime error detected. Saved to {error_log_file}")
-
-                # Ask AI to fix code
-                fix_prompt = f"""
-The following Python code failed to run:
-{new_code}
-
-Error message:
-{stderr}
-
-Your task: 
-- Fix the code so it runs correctly as an interactive chat program.
-- Return ONLY the fixed Python code (no Markdown, no explanations, no extra text).
-- At the end, include a '**Summary:**' section as a Python comment block, listing:
-  - Fixes applied
-  - Next improvements to consider
-"""
-                print("Attempting AI auto-fix...")
-                response = call_openrouter(fix_prompt)
-                ai_text = response['choices'][0]['message']['content']
-
-                summary_start = ai_text.find("**Summary:**")
-                if summary_start != -1:
-                    new_code = ai_text[:summary_start].rstrip()
-                    summary_fix = ai_text[summary_start:].strip()
-                else:
-                    new_code = ai_text
-                    summary_fix = "# **Summary:** AI fix applied, no summary."
-
-                # Save fixed code and update log
-                write_example(new_code)
-                write_log(counter, summary + "\n\n" + summary_fix)
-                print("AI fix applied, retrying run...")
-
+        print(f"Run {counter} complete. example.py updated. Log saved as log_{counter}.txt")
     except Exception as e:
         print(f"Brain run failed: {e}")
-
 
 if __name__ == "__main__":
     main()
