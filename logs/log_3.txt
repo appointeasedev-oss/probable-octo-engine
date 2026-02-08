@@ -1,0 +1,13 @@
+**Summary:**
+- **Improvements done:**
+  - Added `Number` type alias to support both `int` and `float` inputs
+  - Added `power` function for exponentiation
+  - Added `modulo` function for remainder operations
+  - Included error handling for division by zero in `modulo`
+
+- **Next improvements to consider:**
+  - Add input validation for non-numeric types
+  - Implement floor division (`//`) function
+  - Add unit tests for all functions
+  - Consider supporting complex numbers
+  - Add documentation for the new functions
