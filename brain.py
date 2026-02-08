@@ -1,13 +1,17 @@
 import os
+import json
 import random
 import requests
-import re
-import json
 import subprocess
+import re
+import time
 
+# ================= CONFIG =================
 ARAS_ROOT = "ARAS"
 LOG_DIR = "logs"
 COUNTER_FILE = "counter.txt"
+MODEL_NAME = "arcee-ai/trinity-large-preview:free"
+MAX_RETRIES = 3
 
 OPENROUTER_KEYS = [
     os.getenv("OPENROUTER_KEY_1"),
@@ -16,18 +20,18 @@ OPENROUTER_KEYS = [
     os.getenv("OPENROUTER_KEY_4"),
     os.getenv("OPENROUTER_KEY_5"),
 ]
+# =========================================
 
-MODEL_NAME = "arcee-ai/trinity-large-preview:free"
 
-# -------- Helpers --------
+# ---------- Utilities ----------
 def rotate_keys():
     keys = [k for k in OPENROUTER_KEYS if k]
     random.shuffle(keys)
     return keys
 
+
 def call_openrouter(prompt):
-    keys = rotate_keys()
-    for key in keys:
+    for key in rotate_keys():
         try:
             resp = requests.post(
                 "https://openrouter.ai/api/v1/chat/completions",
@@ -44,7 +48,8 @@ def call_openrouter(prompt):
             pass
     raise RuntimeError("All OpenRouter keys failed")
 
-def ensure_files():
+
+def ensure_environment():
     os.makedirs(LOG_DIR, exist_ok=True)
     os.makedirs(ARAS_ROOT, exist_ok=True)
 
@@ -57,63 +62,71 @@ def ensure_files():
         with open(COUNTER_FILE, "w") as f:
             f.write("0")
 
+
 def read_counter():
     with open(COUNTER_FILE) as f:
         return int(f.read().strip())
 
-def increment_counter():
-    c = read_counter() + 1
+
+def write_counter(value):
     with open(COUNTER_FILE, "w") as f:
-        f.write(str(c))
-    return c
+        f.write(str(value))
+
 
 def read_workspace():
-    workspace = {}
+    data = {}
     for root, _, files in os.walk(ARAS_ROOT):
         for file in files:
             path = os.path.join(root, file)
             rel = os.path.relpath(path, ARAS_ROOT)
             with open(path, "r", errors="ignore") as f:
-                workspace[rel] = f.read()
-    return workspace
+                data[rel] = f.read()
+    return data
 
-def apply_operations(operations):
-    did_change = False
-
-    for op in operations:
-        action = op["action"]
-        target = os.path.abspath(os.path.join(ARAS_ROOT, op["path"]))
-
-        if not target.startswith(os.path.abspath(ARAS_ROOT)):
-            continue
-
-        if action == "create_dir":
-            os.makedirs(target, exist_ok=True)
-            did_change = True
-
-        elif action == "write_file":
-            os.makedirs(os.path.dirname(target), exist_ok=True)
-            with open(target, "w", encoding="utf-8") as f:
-                f.write(op["content"])
-            did_change = True
-
-    return did_change
 
 def parse_previous_logs():
-    improvements = set()
+    done = set()
     if not os.path.exists(LOG_DIR):
-        return improvements
+        return done
     for log in os.listdir(LOG_DIR):
         with open(os.path.join(LOG_DIR, log)) as f:
-            text = f.read()
-            matches = re.findall(r"- Improvements done: (.+)", text)
-            for m in matches:
-                improvements.add(m.strip())
-    return improvements
+            for m in re.findall(r"- Improvements done: (.+)", f.read()):
+                done.add(m.strip())
+    return done
 
-def write_log(counter, text):
-    with open(os.path.join(LOG_DIR, f"log_{counter}.txt"), "w") as f:
-        f.write(text)
+
+def extract_json(text):
+    try:
+        return json.loads(text)
+    except:
+        pass
+
+    match = re.search(r"\{[\s\S]*\}", text)
+    if match:
+        return json.loads(match.group())
+
+    raise ValueError("Invalid JSON")
+
+
+def apply_operations(ops):
+    changed = False
+    for op in ops:
+        path = os.path.abspath(os.path.join(ARAS_ROOT, op["path"]))
+        if not path.startswith(os.path.abspath(ARAS_ROOT)):
+            continue
+
+        if op["action"] == "create_dir":
+            os.makedirs(path, exist_ok=True)
+            changed = True
+
+        elif op["action"] == "write_file":
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(op["content"])
+            changed = True
+
+    return changed
+
 
 def run_aras_main():
     try:
@@ -122,37 +135,43 @@ def run_aras_main():
             stderr=subprocess.STDOUT,
             timeout=10,
         )
-        return "ARAS/main.py executed successfully."
+        return True, "Execution OK"
     except subprocess.CalledProcessError as e:
-        return f"Runtime error:\n{e.output.decode()}"
+        return False, e.output.decode()
     except Exception as e:
-        return f"Execution failed: {e}"
+        return False, str(e)
 
-# -------- Brain Logic --------
+
+def write_log(counter, text):
+    with open(os.path.join(LOG_DIR, f"log_{counter}.txt"), "w") as f:
+        f.write(text)
+
+
+# ---------- Brain ----------
 def main():
-    ensure_files()
-    counter = increment_counter()
+    ensure_environment()
+    counter = read_counter() + 1
 
     workspace = read_workspace()
-    previous_improvements = parse_previous_logs()
+    memory = parse_previous_logs()
 
-    prompt = f"""
-You are ARAS, an autonomous coding agent You have to improve .
+    base_prompt = f"""
+You are ARAS, a real autonomous coding agent.
 
-RULES (MANDATORY):
-- You MUST perform at least one filesystem operation.
-- You MUST modify, create, or extend files inside ARAS/.
-- You MUST NOT return empty operations.
+STRICT RULES:
+- You MUST change at least one file inside ARAS/.
+- You MAY create folders/files.
 - You MUST keep ARAS/main.py runnable.
+- You MUST return ONLY valid JSON.
+- No explanations. No markdown.
 
-Current workspace:
+Workspace:
 {json.dumps(workspace, indent=2)}
 
 Previous improvements (do not repeat):
-{previous_improvements}
+{memory}
 
-Respond ONLY in valid JSON:
-
+JSON FORMAT:
 {{
   "operations": [
     {{
@@ -165,19 +184,38 @@ Respond ONLY in valid JSON:
 }}
 """
 
-    response = call_openrouter(prompt)
-    result = json.loads(response["choices"][0]["message"]["content"])
+    last_error = ""
+    for attempt in range(1, MAX_RETRIES + 1):
+        prompt = base_prompt
+        if last_error:
+            prompt += f"\nERROR TO FIX:\n{last_error}"
 
-    changed = apply_operations(result["operations"])
+        response = call_openrouter(prompt)
+        ai_text = response["choices"][0]["message"]["content"]
 
-    if not changed:
-        raise RuntimeError("AI returned no effective operations. Aborting run.")
+        try:
+            result = extract_json(ai_text)
+            changed = apply_operations(result["operations"])
 
-    runtime_report = run_aras_main()
-    summary = result["summary"] + "\n\n**Runtime Check:**\n" + runtime_report
+            if not changed:
+                last_error = "No filesystem changes were made."
+                continue
 
-    write_log(counter, summary)
-    print(f"ARAS run {counter} complete.")
+            ok, runtime = run_aras_main()
+            if not ok:
+                last_error = runtime
+                continue
+
+            write_counter(counter)
+            write_log(counter, result["summary"] + "\n\nRuntime OK")
+            print(f"ARAS run {counter} complete.")
+            return
+
+        except Exception as e:
+            last_error = str(e)
+
+    raise RuntimeError("ARAS failed after maximum retries")
+
 
 if __name__ == "__main__":
     main()
