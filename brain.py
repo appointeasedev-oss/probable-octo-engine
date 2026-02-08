@@ -4,17 +4,19 @@ import requests
 import time
 from datetime import datetime
 
-# ---------------- CONFIG ----------------
+# ================= CONFIG =================
 BRAIN_FILE = "brain.py"
 EXAMPLE_FILE = "example.py"
 
-LOG_DIR = "logs"
-OLD_BRAIN_DIR = "old_brain"
+BRAIN_COUNTER_FILE = "brain_counter.txt"
+
+BRAIN_LOG_DIR = "brain_logs"
+BRAIN_OLD_DIR = "brain_old"
 BRAIN_HISTORY_DIR = "brain_history"
 BRAIN_ERROR_DIR = "brain_errors"
+
 EXAMPLE_ERROR_DIR = "example_errors"
 
-COUNTER_FILE = "counter.txt"
 MODEL_NAME = "arcee-ai/trinity-large-preview:free"
 
 OPENROUTER_KEYS = [
@@ -25,11 +27,11 @@ OPENROUTER_KEYS = [
     os.getenv("OPENROUTER_KEY_5"),
 ]
 
-# ---------------- FILE SYSTEM ----------------
+# ================= FILESYSTEM =================
 def ensure_dirs():
     for d in [
-        LOG_DIR,
-        OLD_BRAIN_DIR,
+        BRAIN_LOG_DIR,
+        BRAIN_OLD_DIR,
         BRAIN_HISTORY_DIR,
         BRAIN_ERROR_DIR,
         EXAMPLE_ERROR_DIR,
@@ -39,19 +41,19 @@ def ensure_dirs():
         if not os.path.exists(keep):
             open(keep, "w").write("")
 
-    if not os.path.exists(COUNTER_FILE):
-        open(COUNTER_FILE, "w").write("0")
+    if not os.path.exists(BRAIN_COUNTER_FILE):
+        open(BRAIN_COUNTER_FILE, "w").write("0")
 
     if not os.path.exists(EXAMPLE_FILE):
         open(EXAMPLE_FILE, "w").write("# example.py\n")
 
-# ---------------- COUNTER ----------------
-def increment_counter():
-    val = int(open(COUNTER_FILE).read().strip()) + 1
-    open(COUNTER_FILE, "w").write(str(val))
+# ================= COUNTER =================
+def increment_brain_counter():
+    val = int(open(BRAIN_COUNTER_FILE).read().strip()) + 1
+    open(BRAIN_COUNTER_FILE, "w").write(str(val))
     return val
 
-# ---------------- AI CORE ----------------
+# ================= AI CORE =================
 def rotate_keys():
     keys = [k for k in OPENROUTER_KEYS if k]
     random.shuffle(keys)
@@ -75,66 +77,71 @@ def call_ai(prompt):
             continue
     raise RuntimeError("All OpenRouter keys failed")
 
-# ---------------- VERIFY ----------------
+# ================= VERIFY =================
 def verify_code(code):
     prompt = f"""
 Check ONLY for Python syntax or runtime-breaking errors.
-Ignore style and optimization.
+Ignore style.
 
-Answer strictly:
+Answer:
 YES
 or
-NO: <short reason>
+NO: <reason>
 
 Code:
 {code}
 """
     return call_ai(prompt)
 
-# ---------------- IMPROVE ----------------
-def improve_code(code, previous_error):
+# ================= IMPROVE =================
+def improve_code(code, last_error):
     prompt = f"""
-Improve this Python code with engineering intent.
+You are improving a self-modifying Python system.
 
 STRICT RULES:
-- Do NOT change AI model or provider references
-- ALWAYS attempt improvement (even small)
+- Do NOT change AI model/provider references
+- ALWAYS make at least one real improvement
 - Fix previous error if present
-- Output FULL CODE
-- Append a **Summary** section exactly as shown below
+- Return in TWO blocks ONLY:
 
-Previous error:
-{previous_error}
+<CODE>
+<python code only>
+</CODE>
 
-Code:
-{code}
-
-FORMAT:
-<code>
-
-**Summary:**
+<SUMMARY>
 **Improvements done:**
 - ...
 
 **Next improvements to consider:**
 - ...
+</SUMMARY>
+
+Previous error:
+{last_error}
+
+Code:
+{code}
 """
     return call_ai(prompt)
 
-# ---------------- CORE UPDATE LOGIC ----------------
-def improve_file(path, error_dir, allow_retry):
+def split_response(text):
+    code = text.split("<CODE>")[1].split("</CODE>")[0].strip()
+    summary = text.split("<SUMMARY>")[1].split("</SUMMARY>")[0].strip()
+    return code, summary
+
+# ================= CORE LOGIC =================
+def improve_file(path, error_dir):
     original = open(path).read()
     last_error = ""
-    improved_summary = ""
 
-    for attempt in range(2 if allow_retry else 1):
-        new_content = improve_code(original, last_error)
-        verify = verify_code(new_content)
+    for attempt in range(2):
+        response = improve_code(original, last_error)
+        new_code, summary = split_response(response)
+        verify = verify_code(new_code)
 
         if verify.strip().startswith("YES"):
-            open(path, "w").write(new_content)
-            improved_summary = new_content.split("**Summary:**", 1)[-1]
-            return True, improved_summary
+            open(path, "w").write(new_code)
+            return True, summary
 
         last_error = verify
         ts = int(time.time())
@@ -142,56 +149,55 @@ def improve_file(path, error_dir, allow_retry):
 
     return False, last_error
 
-# ---------------- MAIN ----------------
+# ================= MAIN =================
 def main():
     ensure_dirs()
-    run = increment_counter()
-    timestamp = int(time.time())
+    run = increment_brain_counter()
+    ts = int(time.time())
     now = datetime.utcnow().isoformat()
 
-    log_lines = []
-    log_lines.append(f"Run #{run} — {now}")
+    log = []
+    log.append(f"Brain Run #{run} — {now}")
 
-    # ---------- BACKUP BRAIN ----------
-    old_path = os.path.join(OLD_BRAIN_DIR, f"brain_{timestamp}.py")
-    open(old_path, "w").write(f"# Backup {now}\n\n" + open(BRAIN_FILE).read())
+    # ----- BACKUP BRAIN (FORCED UNIQUE) -----
+    old_path = os.path.join(BRAIN_OLD_DIR, f"brain_{ts}.py")
+    open(old_path, "w").write(f"# Backup at {now}\n\n" + open(BRAIN_FILE).read())
 
-    # ---------- BRAIN UPDATE ----------
-    success, brain_info = improve_file(BRAIN_FILE, BRAIN_ERROR_DIR, allow_retry=True)
+    # ----- IMPROVE BRAIN -----
+    success, info = improve_file(BRAIN_FILE, BRAIN_ERROR_DIR)
 
     if success:
-        hist = os.path.join(BRAIN_HISTORY_DIR, f"brain_{timestamp}.py")
+        hist = os.path.join(BRAIN_HISTORY_DIR, f"brain_{ts}.py")
         open(hist, "w").write(open(BRAIN_FILE).read())
-        log_lines.append("SUCCESS: brain.py updated")
-        log_lines.append("")
-        log_lines.append("**Summary:**")
-        log_lines.append(brain_info.strip())
+        log.append("SUCCESS: brain.py updated")
+        log.append("")
+        log.append("**Summary:**")
+        log.append(info)
     else:
         open(BRAIN_FILE, "w").write(open(old_path).read())
-        log_lines.append("FAIL: brain.py update failed")
-        log_lines.append("")
-        log_lines.append("**Summary:**")
-        log_lines.append(brain_info)
+        log.append("FAIL: brain.py update failed")
+        log.append("")
+        log.append("**Summary:**")
+        log.append(info)
 
-    # ---------- EXAMPLE UPDATE ----------
-    ex_success, ex_info = improve_file(EXAMPLE_FILE, EXAMPLE_ERROR_DIR, allow_retry=True)
+    # ----- IMPROVE EXAMPLE -----
+    ex_success, ex_info = improve_file(EXAMPLE_FILE, EXAMPLE_ERROR_DIR)
 
     if ex_success:
-        log_lines.append("")
-        log_lines.append("SUCCESS: example.py updated")
-        log_lines.append("")
-        log_lines.append("**Summary:**")
-        log_lines.append(ex_info.strip())
+        log.append("")
+        log.append("SUCCESS: example.py updated")
+        log.append("")
+        log.append("**Summary:**")
+        log.append(ex_info)
     else:
-        log_lines.append("")
-        log_lines.append("FAIL: example.py update failed")
-        log_lines.append("")
-        log_lines.append("**Summary:**")
-        log_lines.append(ex_info)
+        log.append("")
+        log.append("FAIL: example.py update failed")
+        log.append("")
+        log.append("**Summary:**")
+        log.append(ex_info)
 
-    # ---------- WRITE LOG ----------
-    open(os.path.join(LOG_DIR, f"log_{run}.txt"), "w").write("\n".join(log_lines))
-    print("Run complete.")
+    open(os.path.join(BRAIN_LOG_DIR, f"log_{run}.txt"), "w").write("\n".join(log))
+    print("Brain run complete.")
 
 if __name__ == "__main__":
     main()
