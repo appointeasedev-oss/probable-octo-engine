@@ -6,6 +6,9 @@ import re
 import string
 import os
 from typing import Optional, List, Dict
+import threading
+import queue
+from contextlib import contextmanager
 
 # Helper functions for better modularity and testability
 def is_greeting(text: str) -> bool:
@@ -45,7 +48,7 @@ responses = {
     ]
 }
 
-# Load the AI model
+# Load the AI model with fallback
 def load_model() -> Optional:
     try:
         from transformers import pipeline
@@ -62,6 +65,7 @@ def get_time_response() -> str:
 def get_name_response(name: str) -> str:
     return f"ARAS: You are {name}." if name else "ARAS: I don't know your name yet."
 
+# Improved ARAS with better conversation handling
 def aras():
     print("👋 Hello! I am ARAS (A Really Awesome System).")
     name = ""
@@ -72,6 +76,9 @@ def aras():
         print("ARAS: AI mode enabled! I can now have more natural conversations.")
     else:
         conversation = None
+
+    # Conversation history for context
+    history = []
 
     while True:
         user_input = input("You: ").strip()
@@ -88,37 +95,51 @@ def aras():
             bot_response = response[0]['generated_text']
             print(f"ARAS: {bot_response}")
             conversation.append({"role": "assistant", "content": bot_response})
+            history.append({"user": user_input, "bot": bot_response})
             continue
 
         # Greeting detection
         if is_greeting(user_text):
-            print(f"ARAS: {random.choice(responses['greeting'])}")
+            response = random.choice(responses['greeting'])
+            print(f"ARAS: {response}")
+            history.append({"user": user_input, "bot": response})
 
         # Name introduction
         elif contains_any(user_text, ["your name", "who are you", "what's your name"]):
-            print(f"ARAS: {random.choice(responses['name_introduction'])}")
+            response = random.choice(responses['name_introduction'])
+            print(f"ARAS: {response}")
+            history.append({"user": user_input, "bot": response})
 
         # Name extraction
         elif (extracted_name := extract_name(user_input)) is not None:
             name = extracted_name
-            print(f"ARAS: Nice to meet you, {name}!")
+            response = f"ARAS: Nice to meet you, {name}!"
+            print(response)
+            history.append({"user": user_input, "bot": response})
 
         # Identity questions
         elif contains_any(user_text, ["who am i", "what's my name", "do you know my name"]):
-            print(get_name_response(name))
+            response = get_name_response(name)
+            print(response)
+            history.append({"user": user_input, "bot": response})
 
         # Farewell
         elif is_farewell(user_text):
             print("ARAS: Goodbye! Have a great day 🚀")
+            history.append({"user": user_input, "bot": "Goodbye! Have a great day 🚀"})
             break
 
         # Time query
         elif "time" in user_text:
-            print(get_time_response())
+            response = get_time_response()
+            print(response)
+            history.append({"user": user_input, "bot": response})
 
         # Default response
         else:
-            print(f"ARAS: {random.choice(responses['unknown'])}")
+            response = random.choice(responses['unknown'])
+            print(f"ARAS: {response}")
+            history.append({"user": user_input, "bot": response})
 
 # Start ARAS
 if __name__ == "__main__":
