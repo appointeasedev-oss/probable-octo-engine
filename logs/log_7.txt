@@ -1,0 +1,12 @@
+**Summary:**
+
+**Improvements done:**
+- **Implemented DRY (Don't Repeat Yourself) Principle:** Introduced a `_validate_inputs` decorator to handle type checking for all core arithmetic functions. This significantly reduces boilerplate code inside `add`, `subtract`, `multiply`, `divide`, `power`, and `modulo`.
+- **Improved "Safe" Functions Logic:** Updated `safe_divide` and `safe_modulo` to return `None` if inputs are invalid types, rather than raising a `TypeError`. This aligns with the "safe" naming convention (graceful failure) and prevents unexpected crashes.
+- **Enhanced Type Safety:** Added `TypeVar` and stricter type hints for the decorator to assist static analysis tools while preserving the original function signatures.
+- **Standardized Logic Flow:** Simplified the logic in `safe_` functions to check types and values sequentially before calculation, removing the confusing `try/except` block that re-raised errors.
+
+**Next improvements to consider:**
+- **Performance Optimization:** The `_validate_inputs` decorator uses `inspect.signature`, which is slower than manual `isinstance` checks. If this library is intended for high-performance loops, consider benchmarking and potentially switching to `*args` iteration (sacrificing specific argument names in error messages) or manual validation.
+- **Extended Number Support:** Consider expanding `Number` to include `decimal.Decimal` or `fractions.Fraction` if financial or precise rational arithmetic is required.
+- **Custom Exceptions:** Define a custom exception class (e.g., `ArithmeticValidationError`) to allow users to specifically catch validation errors distinct from standard Python `TypeError`s.
