@@ -3,7 +3,7 @@ import random
 import requests
 import re
 
-EXAMPLE_FILE = "main.py"
+EXAMPLE_FILE = "example.py"
 LOG_DIR = "logs"
 COUNTER_FILE = "counter.txt"
 
@@ -50,9 +50,8 @@ def call_openrouter(prompt):
 def ensure_files():
     os.makedirs(LOG_DIR, exist_ok=True)
     if not os.path.exists(EXAMPLE_FILE):
-        os.makedirs(os.path.dirname(EXAMPLE_FILE), exist_ok=True)
         with open(EXAMPLE_FILE, "w") as f:
-            f.write("# ARAS/main.py starter code\n")
+            f.write("# example.py - basic calculator\n")
     if not os.path.exists(COUNTER_FILE):
         with open(COUNTER_FILE, "w") as f:
             f.write("0")
@@ -116,7 +115,7 @@ def main():
     previous_improvements = parse_previous_logs()
 
     prompt = f"""
-You are an AI assistant improving Python code.
+You are an AI assistant improving Python code make it in a way when file ran it make a AI chatbot that answer user.
 Current code:
 {current_code}
 
@@ -148,7 +147,7 @@ Return the full improved Python code, and include a clear summary section starti
         # Save summary in separate log file
         write_log(counter, summary)
 
-        print(f"Run {counter} complete. ARAS/main.py updated. Log saved as log_{counter}.txt")
+        print(f"Run {counter} complete. example.py updated. Log saved as log_{counter}.txt")
     except Exception as e:
         print(f"Brain run failed: {e}")
 
