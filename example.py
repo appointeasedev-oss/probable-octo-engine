@@ -11,6 +11,10 @@ import queue
 from contextlib import contextmanager
 import logging
 from pathlib import Path
+import json
+import hashlib
+import sqlite3
+from transformers import pipeline, Conversation, ConversationManager
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -38,7 +42,6 @@ def contains_all(text: str, phrases: List[str]) -> bool:
 def load_config() -> Dict:
     config_path = Path("aras_config.json")
     if config_path.exists():
-        import json
         with open(config_path, 'r') as f:
             return json.load(f)
     return {
@@ -68,7 +71,6 @@ responses = config['responses']
 # Load the AI model with fallback
 def load_model() -> Optional:
     try:
-        from transformers import pipeline
         model = pipeline("conversational", model="microsoft/DialoGPT-medium")
         return model
     except ImportError:
@@ -87,15 +89,27 @@ def aras():
     print("👋 Hello! I am ARAS (A Really Awesome System).")
     name = ""
     model = load_model()
-
-    if model:
-        conversation: List[Dict[str, str]] = []
-        print("ARAS: AI mode enabled! I can now have more natural conversations.")
-    else:
-        conversation = None
+    conversation_manager = ConversationManager() if model else None
 
     # Conversation history for context
     history = []
+
+    # Initialize database for persistent memory
+    conn = sqlite3.connect('aras_memory.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS memory (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_input TEXT,
+            bot_response TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.commit()
+
+    def save_to_memory(user_input: str, bot_response: str):
+        cursor.execute('INSERT INTO memory (user_input, bot_response) VALUES (?, ?)', (user_input, bot_response))
+        conn.commit()
 
     while True:
         user_input = input("You: ").strip()
@@ -106,57 +120,59 @@ def aras():
         user_text = user_input.lower()
 
         # AI-powered conversation (if model available)
-        if model and conversation is not None:
-            conversation.append({"role": "user", "content": user_input})
-            response = model(conversation, max_length=100, pad_token_id=1)
+        if model and conversation_manager:
+            conversation = Conversation(user_input)
+            conversation_manager.add_conversation(conversation)
+            response = model(conversation_manager, max_length=100, pad_token_id=1)
             bot_response = response[0]['generated_text']
             print(f"ARAS: {bot_response}")
-            conversation.append({"role": "assistant", "content": bot_response})
-            history.append({"user": user_input, "bot": bot_response})
+            save_to_memory(user_input, bot_response)
             continue
 
         # Greeting detection
         if is_greeting(user_text):
             response = random.choice(responses['greeting'])
             print(f"ARAS: {response}")
-            history.append({"user": user_input, "bot": response})
+            save_to_memory(user_input, response)
 
         # Name introduction
         elif contains_any(user_text, ["your name", "who are you", "what's your name"]):
             response = random.choice(responses['name_introduction'])
             print(f"ARAS: {response}")
-            history.append({"user": user_input, "bot": response})
+            save_to_memory(user_input, response)
 
         # Name extraction
         elif (extracted_name := extract_name(user_input)) is not None:
             name = extracted_name
             response = f"ARAS: Nice to meet you, {name}!"
             print(response)
-            history.append({"user": user_input, "bot": response})
+            save_to_memory(user_input, response)
 
         # Identity questions
         elif contains_any(user_text, ["who am i", "what's my name", "do you know my name"]):
             response = get_name_response(name)
             print(response)
-            history.append({"user": user_input, "bot": response})
+            save_to_memory(user_input, response)
 
         # Farewell
         elif is_farewell(user_text):
             print("ARAS: Goodbye! Have a great day 🚀")
-            history.append({"user": user_input, "bot": "Goodbye! Have a great day 🚀"})
+            save_to_memory(user_input, "Goodbye! Have a great day 🚀")
             break
 
         # Time query
         elif "time" in user_text:
             response = get_time_response()
             print(response)
-            history.append({"user": user_input, "bot": response})
+            save_to_memory(user_input, response)
 
         # Default response
         else:
             response = random.choice(responses['unknown'])
             print(f"ARAS: {response}")
-            history.append({"user": user_input, "bot": response})
+            save_to_memory(user_input, response)
+
+    conn.close()
 
 # Start ARAS
 if __name__ == "__main__":
