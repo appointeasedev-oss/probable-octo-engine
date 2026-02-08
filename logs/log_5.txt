@@ -1,0 +1,17 @@
+**Summary:**
+
+**Improvements done:**
+- Added optional AI-powered conversation using Hugging Face's DialoGPT model
+- Created `load_model()` function with graceful fallback if transformers library is missing
+- Integrated AI responses into main conversation loop with proper conversation history tracking
+- Added user feedback when AI mode is enabled or disabled
+- Maintained all existing functionality while adding new AI capabilities
+
+**Next improvements to consider:**
+- Add conversation memory to maintain context across multiple exchanges
+- Implement personality configuration options
+- Add voice input/output capabilities
+- Create a GUI interface for better user experience
+- Add support for multiple languages
+- Implement conversation logging and export features
+- Add custom response training capabilities

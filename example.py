@@ -4,6 +4,7 @@ import random
 import datetime
 import re
 import string
+import os
 
 # Helper functions for better modularity and testability
 def is_greeting(text):
@@ -40,14 +41,40 @@ responses = {
     ]
 }
 
+# Load the AI model
+def load_model():
+    try:
+        from transformers import pipeline
+        model = pipeline("conversational", model="microsoft/DialoGPT-medium")
+        return model
+    except ImportError:
+        print("Warning: transformers library not found. AI features will be disabled.")
+        return None
+
 def aras():
     print("👋 Hello! I am ARAS (A Really Awesome System).")
     name = ""
+    model = load_model()
+
+    if model:
+        conversation = []
+        print("ARAS: AI mode enabled! I can now have more natural conversations.")
+    else:
+        conversation = None
 
     while True:
         user = input("You: ").lower().strip()
         if not user:
             print("ARAS: Please type something.")
+            continue
+
+        # AI-powered conversation (if model available)
+        if model and conversation is not None:
+            conversation.append({"role": "user", "content": user})
+            response = model(conversation, max_length=100, pad_token_id=1)
+            bot_response = response[0]['generated_text']
+            print(f"ARAS: {bot_response}")
+            conversation.append({"role": "assistant", "content": bot_response})
             continue
 
         # Greeting detection
