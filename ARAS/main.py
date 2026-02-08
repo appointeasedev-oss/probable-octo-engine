@@ -1,18 +1,34 @@
-# ARAS AI main entry point
-# This is the starting AI that brain will improve automatically
+# ARAS - A Really Awesome System 🤖
 
-print("ARAS AI started")
-print("Hello! I am ARAS, your evolving AI brain.")
+def aras():
+    print("👋 Hello! I am ARAS (A Really Awesome System).")
+    name = ""
 
-# ARAS basic memory
-memory = {"conversations": [], "modules": []}
+    while True:
+        user = input("You: ").lower()
 
-# ARAS simple chat function
-def chat(user_input):
-    reply = f"ARAS received: {user_input}"
-    memory["conversations"].append({"user": user_input, "aras": reply})
-    return reply
+        if user in ["hi", "hello", "hey"]:
+            print("ARAS: Hello there! 😊")
 
-# Example usage
-if __name__ == "__main__":
-    print(chat("Hi ARAS"))
+        elif "your name" in user:
+            print("ARAS: My name is ARAS.")
+
+        elif "my name is" in user:
+            name = user.replace("my name is", "").strip().title()
+            print(f"ARAS: Nice to meet you, {name}!")
+
+        elif "who am i" in user:
+            if name:
+                print(f"ARAS: You are {name}.")
+            else:
+                print("ARAS: I don't know your name yet.")
+
+        elif user in ["bye", "exit", "quit"]:
+            print("ARAS: Goodbye! Have a great day 🚀")
+            break
+
+        else:
+            print("ARAS: I'm still learning. Try something else!")
+
+# Start ARAS
+aras()
