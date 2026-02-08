@@ -13,7 +13,8 @@
   "unknown": [
     "I'm still learning. Try something else!",
     "I'm not sure about that yet. Can you ask something else?",
-    "Hmm, I don't know about that yet."
+    "Hmm, I don't know about that yet.",
+    "I'm still learning that topic. Want to try another question?"
   ],
   "farewell": [
     "Goodbye! Have a great day \ud83d\ude80"

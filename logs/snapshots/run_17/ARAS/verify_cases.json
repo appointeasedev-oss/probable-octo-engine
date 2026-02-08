@@ -11,6 +11,10 @@
     {
       "input": "time",
       "expected_contains": "current time"
+    },
+    {
+      "input": "bye",
+      "expected_contains": "Goodbye"
     }
   ]
 }
