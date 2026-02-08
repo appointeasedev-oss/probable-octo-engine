@@ -1,0 +1,15 @@
+**Summary:**
+
+**Improvements done:**
+- Added helper functions (`is_greeting`, `is_farewell`, `extract_name`, `contains_any`) for better modularity, readability, and testability
+- Used walrus operator (`:=`) for cleaner name extraction logic
+- Added `if __name__ == "__main__":` guard for better script usability
+- Imported `string` module (though not used, it's ready for future text processing needs)
+
+**Next improvements to consider:**
+- Add more diverse and context-aware responses
+- Implement sentiment analysis for more empathetic replies
+- Add support for more complex queries (e.g., weather, calculations)
+- Integrate with external APIs for dynamic information
+- Add logging for debugging and analytics
+- Improve regex patterns for better edge case handling
