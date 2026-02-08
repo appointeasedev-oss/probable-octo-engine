@@ -3,7 +3,7 @@ import random
 import requests
 import re
 
-BRAIN_FILE = "brain.py"
+EXAMPLE_FILE = "example.py"
 LOG_DIR = "logs"
 COUNTER_FILE = "counter.txt"
 
@@ -49,9 +49,9 @@ def call_openrouter(prompt):
 
 def ensure_files():
     os.makedirs(LOG_DIR, exist_ok=True)
-    if not os.path.exists(BRAIN_FILE):
-        with open(BRAIN_FILE, "w") as f:
-            f.write("# brain.py - basic calculator\n")
+    if not os.path.exists(EXAMPLE_FILE):
+        with open(EXAMPLE_FILE, "w") as f:
+            f.write("# example.py - basic calculator\n")
     if not os.path.exists(COUNTER_FILE):
         with open(COUNTER_FILE, "w") as f:
             f.write("0")
@@ -66,12 +66,12 @@ def increment_counter():
         f.write(str(count))
     return count
 
-def read_brain():
-    with open(BRAIN_FILE, "r") as f:
+def read_example():
+    with open(EXAMPLE_FILE, "r") as f:
         return f.read()
 
-def write_brain(content):
-    with open(BRAIN_FILE, "w") as f:
+def write_example(content):
+    with open(EXAMPLE_FILE, "w") as f:
         f.write(content)
 
 def parse_previous_logs():
@@ -84,6 +84,7 @@ def parse_previous_logs():
         path = os.path.join(LOG_DIR, log_file)
         with open(path, "r") as f:
             text = f.read()
+            # Extract improvements done from previous logs
             matches = re.findall(r"- Improvements done: (.+)", text)
             for m in matches:
                 improvements_done.add(m.strip())
@@ -95,17 +96,22 @@ def write_log(counter, summary):
         f.write(summary)
 
 def extract_summary(ai_response):
+    """
+    Extract only the summary section from the AI response.
+    Assumes AI includes '**Summary:**' section.
+    """
     text = ai_response['choices'][0]['message']['content']
     summary_index = text.find("**Summary:**")
     if summary_index != -1:
         return text[summary_index:]
+    # fallback: return last 20 lines
     return "\n".join(text.splitlines()[-20:])
 
 # -------- Brain Logic --------
 def main():
     ensure_files()
     counter = increment_counter()
-    current_code = read_brain()
+    current_code = read_example()
     previous_improvements = parse_previous_logs()
 
     prompt = f"""
@@ -123,8 +129,10 @@ Return the full improved Python code, and include a clear summary section starti
 
     try:
         response = call_openrouter(prompt)
+        # Extract improved code and summary
         ai_text = response['choices'][0]['message']['content']
 
+        # Split code and summary
         summary_start = ai_text.find("**Summary:**")
         if summary_start != -1:
             new_code = ai_text[:summary_start].strip()
@@ -133,10 +141,13 @@ Return the full improved Python code, and include a clear summary section starti
             new_code = ai_text
             summary = "**Summary:** No summary provided."
 
-        write_brain(new_code)
+        # Save improved code
+        write_example(new_code)
+
+        # Save summary in separate log file
         write_log(counter, summary)
 
-        print(f"Run {counter} complete. brain.py updated. Log saved as log_{counter}.txt")
+        print(f"Run {counter} complete. example.py updated. Log saved as log_{counter}.txt")
     except Exception as e:
         print(f"Brain run failed: {e}")
 
