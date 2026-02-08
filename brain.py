@@ -1,25 +1,14 @@
 import os
-import json
 import random
 import requests
-import subprocess
-import shutil
-import difflib
 import re
-import time
 
-# ================= CONFIG =================
-ARAS_ROOT = "ARAS"
+# ----------------- Config -----------------
+EXAMPLE_FILE = "ARAS/main.py"   # <-- Now editing ARAS/main.py
 LOG_DIR = "logs"
-SNAPSHOT_DIR = "snapshots"
 COUNTER_FILE = "counter.txt"
-MODEL_NAME = "arcee-ai/trinity-large-preview:free"
-# Max time to run main.py or tests
-RUN_TIMEOUT = 15
-# Sleep between retries
-RETRY_DELAY = 2
-# =========================================
 
+# Load OpenRouter keys from environment variables
 OPENROUTER_KEYS = [
     os.getenv("OPENROUTER_KEY_1"),
     os.getenv("OPENROUTER_KEY_2"),
@@ -28,225 +17,141 @@ OPENROUTER_KEYS = [
     os.getenv("OPENROUTER_KEY_5"),
 ]
 
-# ---------- Utilities ----------
+MODEL_NAME = "arcee-ai/trinity-large-preview:free"
+
+# -------- Helpers --------
 def rotate_keys():
+    """Shuffle API keys and return usable ones"""
     keys = [k for k in OPENROUTER_KEYS if k]
     random.shuffle(keys)
     return keys
 
 def call_openrouter(prompt):
-    for key in rotate_keys():
+    """Call OpenRouter API with key rotation"""
+    keys = rotate_keys()
+    for key in keys:
+        headers = {"Authorization": f"Bearer {key}"}
+        data = {
+            "model": MODEL_NAME,
+            "messages": [{"role": "user", "content": prompt}],
+        }
         try:
-            r = requests.post(
+            resp = requests.post(
                 "https://openrouter.ai/api/v1/chat/completions",
-                headers={"Authorization": f"Bearer {key}"},
-                json={"model": MODEL_NAME, "messages": [{"role": "user", "content": prompt}]},
-                timeout=60,
+                headers=headers,
+                json=data,
+                timeout=60
             )
-            if r.status_code == 200:
-                return r.json()
-        except:
-            pass
+            if resp.status_code == 200:
+                return resp.json()
+            else:
+                print(f"Key failed ({resp.status_code}), trying next key...")
+        except Exception as e:
+            print(f"Exception with key: {e}, trying next key...")
     raise RuntimeError("All OpenRouter keys failed")
 
-def ensure_env():
-    os.makedirs(ARAS_ROOT, exist_ok=True)
+def ensure_files():
+    """Ensure necessary files and folders exist"""
     os.makedirs(LOG_DIR, exist_ok=True)
-    os.makedirs(SNAPSHOT_DIR, exist_ok=True)
-
-    main_py = os.path.join(ARAS_ROOT, "main.py")
-    if not os.path.exists(main_py):
-        with open(main_py, "w") as f:
-            f.write("print('ARAS running')\n")
-
+    if not os.path.exists(EXAMPLE_FILE):
+        os.makedirs(os.path.dirname(EXAMPLE_FILE), exist_ok=True)
+        with open(EXAMPLE_FILE, "w") as f:
+            f.write("# ARAS main.py starter code\n")
     if not os.path.exists(COUNTER_FILE):
         with open(COUNTER_FILE, "w") as f:
             f.write("0")
 
 def read_counter():
-    with open(COUNTER_FILE) as f:
+    with open(COUNTER_FILE, "r") as f:
         return int(f.read().strip())
 
-def write_counter(v):
+def increment_counter():
+    count = read_counter() + 1
     with open(COUNTER_FILE, "w") as f:
-        f.write(str(v))
+        f.write(str(count))
+    return count
 
-def snapshot(counter):
-    path = os.path.join(SNAPSHOT_DIR, f"run_{counter}")
-    if os.path.exists(path):
-        shutil.rmtree(path)
-    shutil.copytree(ARAS_ROOT, path)
-    return path
+def read_example():
+    with open(EXAMPLE_FILE, "r") as f:
+        return f.read()
 
-def rollback(snapshot_path):
-    shutil.rmtree(ARAS_ROOT)
-    shutil.copytree(snapshot_path, ARAS_ROOT)
-
-def read_workspace():
-    data = {}
-    for root, _, files in os.walk(ARAS_ROOT):
-        for file in files:
-            p = os.path.join(root, file)
-            rel = os.path.relpath(p, ARAS_ROOT)
-            with open(p, "r", errors="ignore") as f:
-                data[rel] = f.read()
-    return data
-
-def apply_diff(path, diff_text):
-    file_path = os.path.join(ARAS_ROOT, path)
-    old = []
-    if os.path.exists(file_path):
-        with open(file_path) as f:
-            old = f.readlines()
-
-    # Apply unified diff manually
-    patch_lines = difflib.unified_diff(old, diff_text.splitlines(keepends=True))
-    new = list(difflib.restore(list(patch_lines), 1))
-
-    if new != old:
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, "w") as f:
-            f.writelines(new)
-        return True
-    return False
-
-def run_main():
-    try:
-        subprocess.check_output(
-            ["python", os.path.join(ARAS_ROOT, "main.py")],
-            stderr=subprocess.STDOUT, timeout=RUN_TIMEOUT
-        )
-        return True, ""
-    except subprocess.CalledProcessError as e:
-        return False, e.output.decode()
-    except Exception as e:
-        return False, str(e)
-
-def run_tests():
-    if not os.path.exists(os.path.join(ARAS_ROOT, "tests")):
-        return True, ""
-    try:
-        subprocess.check_output(
-            ["pytest", ARAS_ROOT],
-            stderr=subprocess.STDOUT, timeout=RUN_TIMEOUT
-        )
-        return True, ""
-    except Exception as e:
-        return False, str(e)
-
-def extract_json(text):
-    try:
-        return json.loads(text)
-    except:
-        m = re.search(r"\{[\s\S]*\}", text)
-        if m:
-            return json.loads(m.group())
-    raise ValueError("Invalid JSON")
+def write_example(content):
+    with open(EXAMPLE_FILE, "w") as f:
+        f.write(content)
 
 def parse_previous_logs():
-    done = set()
+    """Extract previous improvements from logs to avoid repeats"""
+    improvements_done = set()
     if not os.path.exists(LOG_DIR):
-        return done
-    for log in os.listdir(LOG_DIR):
-        with open(os.path.join(LOG_DIR, log)) as f:
-            for m in re.findall(r"- Improvements done: (.+)", f.read()):
-                done.add(m.strip())
-    return done
+        return improvements_done
+    logs = sorted(os.listdir(LOG_DIR))
+    for log_file in logs:
+        path = os.path.join(LOG_DIR, log_file)
+        with open(path, "r") as f:
+            text = f.read()
+            matches = re.findall(r"- Improvements done: (.+)", text)
+            for m in matches:
+                improvements_done.add(m.strip())
+    return improvements_done
 
-def write_log(counter, text):
-    with open(os.path.join(LOG_DIR, f"log_{counter}.txt"), "w") as f:
-        f.write(text)
+def write_log(counter, summary):
+    log_file = os.path.join(LOG_DIR, f"log_{counter}.txt")
+    with open(log_file, "w") as f:
+        f.write(summary)
 
-# ---------- Brain ----------
+def extract_summary(ai_response):
+    """
+    Extract only the summary section from the AI response.
+    Assumes AI includes '**Summary:**' section.
+    """
+    text = ai_response['choices'][0]['message']['content']
+    summary_index = text.find("**Summary:**")
+    if summary_index != -1:
+        return text[summary_index:]
+    return "\n".join(text.splitlines()[-20:])
+
+# -------- Brain Logic --------
 def main():
-    ensure_env()
-    counter = read_counter() + 1
-    snap = snapshot(counter)
-    workspace = read_workspace()
-    memory = parse_previous_logs()
+    ensure_files()
+    counter = increment_counter()
+    current_code = read_example()
+    previous_improvements = parse_previous_logs()
 
-    base_prompt = f"""
-You are ARAS, an autonomous coding agent.
-
-LONG-TERM GOALS:
-- Always improve ARAS folder
-- Modularize and refactor code
-- Ensure main.py runs
-- Add or improve tests if present
-- Accumulate improvements without repeating past work
-
-RULES:
-- Return ONLY valid JSON
-- Plan before executing
-- Use diff if possible, fallback to full file overwrite if necessary
-- At least one file must be changed
-- main.py must run successfully
-
-Workspace:
-{json.dumps(workspace, indent=2)}
+    prompt = f"""
+You are an AI assistant improving Python code.
+Current code:
+{current_code}
 
 Previous improvements (do not repeat):
-{memory}
+{previous_improvements}
 
-JSON FORMAT:
-{{
-  "plan": ["step1", "step2"],
-  "diffs": [
-    {{
-      "path": "relative/path.py",
-      "diff": "unified diff or full content"
-    }}
-  ],
-  "summary": "**Summary:**\\n- Improvements done: ...\\n- Next improvements to consider: ..."
-}}
+Return the full improved Python code, and include a clear summary section starting with '**Summary:**' listing:
+- Improvements done
+- Next improvements to consider
 """
 
-    last_error = ""
-    while True:  # Loop until success
-        prompt = base_prompt + (f"\nERROR TO FIX:\n{last_error}" if last_error else "")
+    try:
         response = call_openrouter(prompt)
-        ai_text = response["choices"][0]["message"]["content"]
-        try:
-            data = extract_json(ai_text)
-            changes_applied = False
+        ai_text = response['choices'][0]['message']['content']
 
-            # Apply diffs or full file writes
-            for d in data.get("diffs", []):
-                applied = apply_diff(d["path"], d["diff"])
-                changes_applied = changes_applied or applied
+        # Split code and summary
+        summary_start = ai_text.find("**Summary:**")
+        if summary_start != -1:
+            new_code = ai_text[:summary_start].strip()
+            summary = ai_text[summary_start:].strip()
+        else:
+            new_code = ai_text
+            summary = "**Summary:** No summary provided."
 
-            if not changes_applied:
-                last_error = "No file changes applied. Retrying..."
-                time.sleep(RETRY_DELAY)
-                rollback(snap)
-                continue
+        # Save improved code
+        write_example(new_code)
 
-            # Run main.py
-            ok, err = run_main()
-            if not ok:
-                last_error = f"main.py failed: {err}"
-                time.sleep(RETRY_DELAY)
-                rollback(snap)
-                continue
+        # Save summary log
+        write_log(counter, summary)
 
-            # Run tests
-            ok, err = run_tests()
-            if not ok:
-                last_error = f"Tests failed: {err}"
-                time.sleep(RETRY_DELAY)
-                rollback(snap)
-                continue
-
-            # Success
-            write_counter(counter)
-            write_log(counter, data.get("summary", "**Summary:** No summary provided"))
-            print(f"ARAS run {counter} complete. Improvements applied successfully.")
-            return
-
-        except Exception as e:
-            last_error = str(e)
-            time.sleep(RETRY_DELAY)
-            rollback(snap)
+        print(f"Run {counter} complete. ARAS/main.py updated. Log saved as log_{counter}.txt")
+    except Exception as e:
+        print(f"Brain run failed: {e}")
 
 if __name__ == "__main__":
     main()
