@@ -1,0 +1,83 @@
+**Summary:**")
+    if summary_index != -1:
+        return text[summary_index:]
+    return "\n".join(text.splitlines()[-20:])
+
+def load_state() -> Dict[str, Any]:
+    """Load conversation state from state.json."""
+    with open(STATE_FILE, "r") as f:
+        return json.load(f)
+
+def save_state(state: Dict[str, Any]):
+    """Save conversation state to state.json."""
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f, indent=2)
+
+def main():
+    ensure_files()
+    counter = increment_counter()
+    current_code = read_brain()
+    previous_improvements = parse_previous_logs()
+    state = load_state()
+
+    prompt = f"""
+You are an AI assistant improving Python code make it in a way when file ran it make a AI chatbot that answer user.keep advancing it alwas improve it to make it better 
+Current code:
+{current_code}
+
+Previous improvements (do not repeat):
+{previous_improvements}
+
+Conversation history (maintain context):
+{json.dumps(state["conversations"], indent=2)}
+
+Return the full improved Python code, and include a clear summary section starting with '**Summary:**' listing:
+- Improvements done
+- Next improvements to consider
+"""
+
+    try:
+        response = call_openrouter(prompt)
+        ai_text = response['choices'][0]['message']['content']
+
+        summary_start = ai_text.find("**Summary:**")
+        if summary_start != -1:
+            new_code = ai_text[:summary_start].strip()
+            summary = ai_text[summary_start:].strip()
+        else:
+            new_code = ai_text
+            summary = "**Summary:** No summary provided."
+
+        write_brain(new_code)
+        write_log(counter, summary)
+
+        # Update state with this conversation
+        state["conversations"].append({
+            "prompt": prompt,
+            "response": ai_text,
+            "timestamp": datetime.now().isoformat()
+        })
+        save_state(state)
+
+        print(f"Run {counter} complete. brain.py updated. Log saved as log_{counter}.txt")
+    except Exception as e:
+        print(f"Brain run failed: {e}")
+
+if __name__ == "__main__":
+    main()
+```
+
+**Summary:**
+- Improvements done:
+  - Added state management with state.json to track conversation history
+  - Implemented typing hints for better code clarity
+  - Added datetime and json imports for state handling
+  - Enhanced error handling and logging
+  - Improved code organization with type hints and better function documentation
+  - Added conversation history to prompts for better context awareness
+- Next improvements to consider:
+  - Implement proper chatbot runtime functionality
+  - Add more sophisticated conversation state management
+  - Implement better error recovery mechanisms
+  - Add unit tests for core functionality
+  - Consider implementing a more robust configuration system
