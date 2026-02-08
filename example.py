@@ -2,6 +2,7 @@
 # ARAS - A Really Awesome System 🤖
 import random
 import datetime
+import re
 
 def aras():
     print("👋 Hello! I am ARAS (A Really Awesome System).")
@@ -37,14 +38,17 @@ def aras():
             print("ARAS: Please type something.")
             continue
 
-        if user in greetings:
+        # Improved greeting detection with regex
+        if re.search(r'\b(' + '|'.join(greetings) + r')\b', user):
             print(f"ARAS: {random.choice(responses['greeting'])}")
 
+        # Improved name detection with regex
         elif any(q in user for q in name_questions):
             print(f"ARAS: {random.choice(responses['name_introduction'])}")
 
-        elif "my name is" in user:
-            name = user.replace("my name is", "").strip().title()
+        # Improved name extraction with regex
+        elif re.search(r'my name is (\w+)', user):
+            name = re.search(r'my name is (\w+)', user).group(1).title()
             if not name:
                 print("ARAS: What's your name?")
             else:

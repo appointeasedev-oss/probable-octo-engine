@@ -1,0 +1,15 @@
+**Summary:**
+
+**Improvements done:**
+- Added `re` module for regex pattern matching
+- Improved greeting detection with regex for more accurate matching
+- Improved name detection with regex for more accurate matching
+- Improved name extraction with regex for more accurate matching
+- Added comments to explain the improvements
+
+**Next improvements to consider:**
+- Add more responses and conversation topics
+- Implement a more advanced natural language processing library
+- Add a conversation history to improve context awareness
+- Implement a more sophisticated name extraction algorithm
+- Add more error handling and input validation
