@@ -1,5 +1,7 @@
-# Brain metadata: last_run=2026-02-08T16:15:46.854341
+# Brain metadata: last_run=2026-02-08T16:08:33.534492
 import json
+import os
+import random
 import shutil
 import subprocess
 import sys
@@ -7,6 +9,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
+
+from urllib import error, request
 
 ARAS_DIR = Path("ARAS")
 RESPONSES_PATH = ARAS_DIR / "responses.json"
@@ -76,6 +80,18 @@ IMPROVEMENT_QUEUE: List[Improvement] = [
         },
     ),
 ]
+
+OPENROUTER_KEYS = [
+    key
+    for key in [
+        os.getenv("OPENROUTER_KEY_1"),
+        os.getenv("OPENROUTER_KEY_2"),
+        os.getenv("OPENROUTER_KEY_3"),
+        os.getenv("OPENROUTER_KEY_4"),
+        os.getenv("OPENROUTER_KEY_5"),
+    ]
+    if key
+]
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "arcee-ai/trinity-large-preview:free")
 
 
@@ -90,6 +106,70 @@ def save_json(path: Path, data) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
         json.dump(data, handle, indent=2)
+
+
+def call_openrouter(prompt: str) -> str:
+    if not OPENROUTER_KEYS:
+        raise RuntimeError("No OpenRouter keys configured.")
+    keys = OPENROUTER_KEYS[:]
+    random.shuffle(keys)
+    for key in keys:
+        try:
+            payload = json.dumps(
+                {
+                    "model": OPENROUTER_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                }
+            ).encode("utf-8")
+            req = request.Request(
+                "https://openrouter.ai/api/v1/chat/completions",
+                data=payload,
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                method="POST",
+            )
+            with request.urlopen(req, timeout=60) as response:
+                if response.status == 200:
+                    data = json.loads(response.read().decode("utf-8"))
+                    return data["choices"][0]["message"]["content"]
+        except (error.URLError, error.HTTPError):
+            continue
+    raise RuntimeError("All OpenRouter keys failed.")
+
+
+def generate_openrouter_improvement() -> Improvement | None:
+    if not OPENROUTER_KEYS:
+        return None
+    prompt = (
+        "Return a JSON object with fields type and payload.\n"
+        "Allowed type values: response_variant, verify_case, skill_note, new_file.\n"
+        "Payload must match the type:\n"
+        "- response_variant: {\"category\": \"greeting|name_introduction|unknown|farewell\", \"text\": \"...\"}\n"
+        "- verify_case: {\"input\": \"...\", \"expected_contains\": \"...\"}\n"
+        "- skill_note: {\"title\": \"...\", \"body\": \"...\"}\n"
+        "- new_file: {\"relative_path\": \"ARAS/...\", \"content\": \"...\"}\n"
+        "Respond with JSON only."
+    )
+    try:
+        content = call_openrouter(prompt)
+        data = json.loads(content)
+    except (RuntimeError, json.JSONDecodeError):
+        return None
+
+    type_map = {
+        "response_variant": "response_variant",
+        "verify_case": "verify_case",
+        "skill_note": "skill_note",
+        "new_file": "new_file",
+    }
+    improvement_type = type_map.get(data.get("type"))
+    payload = data.get("payload")
+    if not improvement_type or not isinstance(payload, dict):
+        return None
+    return Improvement(
+        identifier=f"openrouter_{improvement_type}",
+        kind=improvement_type,
+        payload=payload,
+    )
 
 
 def ensure_state() -> Dict[str, int]:
@@ -234,7 +314,9 @@ def run_brain() -> None:
     counter = increment_counter()
     snapshot_sources(counter)
 
-    improvement = IMPROVEMENT_QUEUE[state["next_index"] % len(IMPROVEMENT_QUEUE)]
+    improvement = generate_openrouter_improvement()
+    if improvement is None:
+        improvement = IMPROVEMENT_QUEUE[state["next_index"] % len(IMPROVEMENT_QUEUE)]
     improvement_summary = apply_improvement(improvement)
 
     update_brain_metadata()
