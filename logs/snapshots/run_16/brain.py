@@ -1,5 +1,6 @@
-# Brain metadata: last_run=2026-02-08T16:08:33.534492
+# Brain metadata: last_run=never
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -61,18 +62,6 @@ IMPROVEMENT_QUEUE: List[Improvement] = [
         payload={
             "title": "Conversation memory",
             "body": "Track basic session memory like last topic discussed.",
-        },
-    ),
-    Improvement(
-        identifier="add_module_stub",
-        kind="new_file",
-        payload={
-            "relative_path": "ARAS/modules/skills_stub.py",
-            "content": (
-                "\"\"\"ARAS skill module placeholder.\"\"\"\n\n"
-                "def describe() -> str:\n"
-                "    return \"Skill module placeholder for future ARAS extensions.\"\n"
-            ),
         },
     ),
 ]
@@ -172,17 +161,6 @@ def apply_skill_note(payload: Dict[str, str]) -> str:
     return "Added skill note."
 
 
-def apply_new_file(payload: Dict[str, str]) -> str:
-    relative_path = payload["relative_path"]
-    content = payload["content"]
-    target_path = Path(relative_path)
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    if target_path.exists():
-        return f"File already exists at {relative_path}."
-    target_path.write_text(content, encoding="utf-8")
-    return f"Created new file at {relative_path}."
-
-
 def apply_improvement(improvement: Improvement) -> str:
     if improvement.kind == "response_variant":
         return apply_response_variant(improvement.payload)
@@ -190,8 +168,6 @@ def apply_improvement(improvement: Improvement) -> str:
         return apply_verify_case(improvement.payload)
     if improvement.kind == "skill_note":
         return apply_skill_note(improvement.payload)
-    if improvement.kind == "new_file":
-        return apply_new_file(improvement.payload)
     return "No improvement applied."
 
 
