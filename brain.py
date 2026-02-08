@@ -1,14 +1,12 @@
 import os
 import random
 import requests
-from datetime import datetime
 
-# -------- Config --------
 EXAMPLE_FILE = "example.py"
 LOG_DIR = "logs"
 COUNTER_FILE = "counter.txt"
 
-# Load all keys from env
+# Load OpenRouter keys from env
 OPENROUTER_KEYS = [
     os.getenv("OPENROUTER_KEY_1"),
     os.getenv("OPENROUTER_KEY_2"),
@@ -75,13 +73,18 @@ def write_example(content):
     with open(EXAMPLE_FILE, "w") as f:
         f.write(content)
 
-def last_log_content():
+def parse_previous_logs():
+    """Extract all previous improvements to avoid repeats"""
+    improvements_done = set()
+    if not os.path.exists(LOG_DIR):
+        return improvements_done
     logs = sorted(os.listdir(LOG_DIR))
-    if not logs:
-        return ""
-    last_file = os.path.join(LOG_DIR, logs[-1])
-    with open(last_file, "r") as f:
-        return f.read()
+    for log_file in logs:
+        with open(os.path.join(LOG_DIR, log_file), "r") as f:
+            for line in f:
+                if line.startswith("Improvement:"):
+                    improvements_done.add(line.strip())
+    return improvements_done
 
 def write_log(counter, content):
     log_file = os.path.join(LOG_DIR, f"log_{counter}.txt")
@@ -93,18 +96,19 @@ def main():
     ensure_files()
     counter = increment_counter()
     current_code = read_example()
-    previous_log = last_log_content()
+    previous_improvements = parse_previous_logs()
 
     prompt = f"""
-You are an AI code assistant.
-Improve this Python code intelligently for correctness, readability, and functionality.
-Do not repeat previous improvements.
-Include a summary in the response: Improvements Done, Next Improvements.
-Previous log:
-{previous_log}
+You are an AI assistant improving Python code.
 Current code:
 {current_code}
-Return ONLY the full improved Python code along with your summary at the end.
+
+Previous improvements (do not repeat):
+{previous_improvements}
+
+Return full improved Python code, and at the end include a summary:
+- Improvements done
+- Next improvements to consider
 """
 
     try:
