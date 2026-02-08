@@ -12,6 +12,8 @@ LOG_DIR = "logs"
 TEST_DIR = "test"
 OLD_BRAIN_DIR = "old_brain"
 BRAIN_HISTORY_DIR = "brain_history"
+BRAIN_ERROR_DIR = "brain_errors"
+EXAMPLE_ERROR_DIR = "example_errors"
 COUNTER_FILE = "counter.txt"
 BRAIN_FILE = "brain.py"
 
@@ -34,12 +36,11 @@ def rotate_keys():
 
 def call_openrouter(prompt, model=MODEL_NAME):
     keys = rotate_keys()
+    if not keys:
+        raise RuntimeError("No OpenRouter keys available.")
     for key in keys:
         headers = {"Authorization": f"Bearer {key}"}
-        data = {
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-        }
+        data = {"model": model, "messages": [{"role": "user", "content": prompt}]}
         try:
             resp = requests.post(
                 "https://openrouter.ai/api/v1/chat/completions",
@@ -56,10 +57,8 @@ def call_openrouter(prompt, model=MODEL_NAME):
     raise RuntimeError("All OpenRouter keys failed")
 
 def ensure_dirs():
-    os.makedirs(LOG_DIR, exist_ok=True)
-    os.makedirs(TEST_DIR, exist_ok=True)
-    os.makedirs(OLD_BRAIN_DIR, exist_ok=True)
-    os.makedirs(BRAIN_HISTORY_DIR, exist_ok=True)
+    for d in [LOG_DIR, TEST_DIR, OLD_BRAIN_DIR, BRAIN_HISTORY_DIR, BRAIN_ERROR_DIR, EXAMPLE_ERROR_DIR]:
+        os.makedirs(d, exist_ok=True)
     if not os.path.exists(EXAMPLE_FILE):
         with open(EXAMPLE_FILE, "w") as f:
             f.write("# example.py - basic calculator\n")
@@ -104,28 +103,31 @@ def write_log(counter, summary, folder=LOG_DIR):
     with open(log_file, "w") as f:
         f.write(summary)
 
+# ---------- Test Run ----------
 def run_test_file():
     test_file = os.path.join(TEST_DIR, f"test_run_{int(time.time())}.txt")
     with open(test_file, "w") as f:
         try:
-            proc = subprocess.Popen(
+            subprocess.run(
                 ["python", EXAMPLE_FILE],
                 stdout=f,
-                stderr=subprocess.STDOUT
+                stderr=subprocess.STDOUT,
+                timeout=5
             )
-            time.sleep(5)
-            proc.terminate()
+        except subprocess.TimeoutExpired:
+            f.write("\nTest run timed out after 5 seconds.\n")
         except Exception as e:
             f.write(f"\nTest run failed: {e}")
     print(f"Test run completed. Output saved in {test_file}")
 
+# ---------- AI Verification ----------
 def verify_code_with_ai(code):
     prompt = f"""
 You are a strict code verifier AI.
 Check this Python code for correctness and safety.
 Rules:
 - Do NOT change AI model/provider references.
-- Do not provide general or vague answers.
+- Do not provide vague/general answers.
 - Only allow safe improvements.
 - Respond only YES if code is fully correct and safe, otherwise NO and explain.
 
@@ -136,15 +138,19 @@ Code to verify:
     ai_text = response['choices'][0]['message']['content'].strip().upper()
     return "YES" in ai_text
 
-def improve_file_with_ai(file_path, previous_improvements, retry_until_pass=True):
+# ---------- AI Improvement ----------
+def improve_file_with_ai(file_path, previous_improvements, error_folder, max_verify=1):
     code = read_file(file_path)
-    while True:
+    attempts = 0
+    while attempts < max_verify:
+        attempts += 1
         prompt = f"""
-You are an AI assistant improving Python code with clear purpose to increase engineering quality.
+You are an AI assistant improving Python code with clear engineering purpose.
 Rules:
 - Do NOT change AI model/provider references.
 - Do not give vague/general changes.
 - Only make safe improvements.
+- Take previous errors into account if available.
 
 Current code:
 {code}
@@ -152,9 +158,7 @@ Current code:
 Previous improvements (do not repeat):
 {previous_improvements}
 
-Return full improved code with summary starting '**Summary:**' listing:
-- Improvements done
-- Next improvements to consider
+Return full improved code with summary starting '**Summary:**'.
 """
         response = call_openrouter(prompt)
         ai_text = response['choices'][0]['message']['content']
@@ -170,15 +174,16 @@ Return full improved code with summary starting '**Summary:**' listing:
             write_file(file_path, new_code)
             return summary
         else:
-            if retry_until_pass:
-                print(f"Verification failed for {file_path}, retrying...")
-                code = new_code
-            else:
-                print(f"Verification failed for {file_path}, skipping update.")
-                return None
+            # Save error for next run
+            timestamp = int(time.time())
+            error_file = os.path.join(error_folder, f"error_{timestamp}.txt")
+            write_file(error_file, ai_text)
+            print(f"Verification failed for {file_path}. Error saved at {error_file}")
+            return None  # single verify attempt
 
 # ---------- Brain Self-Update ----------
 def self_update_brain():
+    # Backup current brain
     timestamp = int(time.time())
     old_brain_path = os.path.join(OLD_BRAIN_DIR, f"brain_{timestamp}.py")
     shutil.copyfile(BRAIN_FILE, old_brain_path)
@@ -193,7 +198,7 @@ Rules:
 - Do NOT change AI model/provider references.
 - Do not provide vague/general improvements.
 - Only safe improvements.
-- Return full updated brain.py code and summary starting '**Summary:**'.
+- Take previous brain errors into account if any.
 
 Current brain.py code:
 {code}
@@ -208,36 +213,16 @@ Current brain.py code:
         new_code = ai_text
         summary = "**Summary:** No summary provided."
 
-    # Verify new brain
     if verify_code_with_ai(new_code):
         write_file(BRAIN_FILE, new_code)
-        print("Brain self-update successful.")
         save_brain_history(new_code, summary)
+        print("Brain self-update successful.")
     else:
-        print("Brain verification failed. Sending once to AI to fix...")
-        prompt_fix = f"""
-The previous brain.py update failed verification. Fix the errors safely without changing AI model/provider.
-Code:
-{new_code}
-"""
-        response_fix = call_openrouter(prompt_fix)
-        ai_text_fix = response_fix['choices'][0]['message']['content']
-        summary_start_fix = ai_text_fix.find("**Summary:**")
-        if summary_start_fix != -1:
-            new_code_fix = ai_text_fix[:summary_start_fix].strip()
-            summary_fix = ai_text_fix[summary_start_fix:].strip()
-        else:
-            new_code_fix = ai_text_fix
-            summary_fix = "**Summary:** No summary provided."
-
-        if verify_code_with_ai(new_code_fix):
-            write_file(BRAIN_FILE, new_code_fix)
-            print("Brain self-update successful after fix.")
-            save_brain_history(new_code_fix, summary_fix)
-        else:
-            print("Brain self-update failed after fix. Restoring old brain...")
-            shutil.copyfile(old_brain_path, BRAIN_FILE)
-            print("Old brain restored.")
+        timestamp = int(time.time())
+        error_file = os.path.join(BRAIN_ERROR_DIR, f"error_{timestamp}.txt")
+        write_file(error_file, ai_text)
+        print(f"Brain verification failed. Error saved at {error_file}. Old brain retained.")
+        shutil.copyfile(old_brain_path, BRAIN_FILE)
 
 def save_brain_history(code, summary):
     timestamp = int(time.time())
@@ -246,7 +231,7 @@ def save_brain_history(code, summary):
     write_log(timestamp, summary, folder=BRAIN_HISTORY_DIR)
     print(f"Brain history saved at {hist_file}")
 
-# ---------- Main Brain Logic ----------
+# ---------- Main Logic ----------
 def main():
     ensure_dirs()
     counter = increment_counter()
@@ -256,7 +241,7 @@ def main():
 
     # Step 2: Improve example.py
     previous_improvements = parse_previous_logs()
-    summary = improve_file_with_ai(EXAMPLE_FILE, previous_improvements, retry_until_pass=True)
+    summary = improve_file_with_ai(EXAMPLE_FILE, previous_improvements, EXAMPLE_ERROR_DIR)
     if summary:
         write_log(counter, summary)
         print(f"example.py improved. Log saved.")
