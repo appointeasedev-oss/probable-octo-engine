@@ -1,34 +1,72 @@
+```python
 # ARAS - A Really Awesome System 🤖
+import random
+import datetime
 
 def aras():
     print("👋 Hello! I am ARAS (A Really Awesome System).")
     name = ""
 
+    greetings = ["hi", "hello", "hey", "greetings", "howdy"]
+    farewells = ["bye", "exit", "quit", "goodbye", "see you"]
+    name_questions = ["your name", "who are you", "what's your name"]
+    identity_questions = ["who am i", "what's my name", "do you know my name"]
+
+    responses = {
+        "greeting": [
+            "Hello there! 😊",
+            "Hi! How can I help you today? 😊",
+            "Hey! What's up? 😊"
+        ],
+        "name_introduction": [
+            "My name is ARAS.",
+            "I'm ARAS, nice to meet you!",
+            "You can call me ARAS."
+        ],
+        "unknown": [
+            "I'm still learning. Try something else!",
+            "I'm not sure about that. Can you ask something else?",
+            "Hmm, I don't know about that yet."
+        ]
+    }
+
     while True:
-        user = input("You: ").lower()
+        user = input("You: ").lower().strip()
 
-        if user in ["hi", "hello", "hey"]:
-            print("ARAS: Hello there! 😊")
+        if not user:
+            print("ARAS: Please type something.")
+            continue
 
-        elif "your name" in user:
-            print("ARAS: My name is ARAS.")
+        if user in greetings:
+            print(f"ARAS: {random.choice(responses['greeting'])}")
+
+        elif any(q in user for q in name_questions):
+            print(f"ARAS: {random.choice(responses['name_introduction'])}")
 
         elif "my name is" in user:
             name = user.replace("my name is", "").strip().title()
-            print(f"ARAS: Nice to meet you, {name}!")
+            if not name:
+                print("ARAS: What's your name?")
+            else:
+                print(f"ARAS: Nice to meet you, {name}!")
 
-        elif "who am i" in user:
+        elif any(q in user for q in identity_questions):
             if name:
                 print(f"ARAS: You are {name}.")
             else:
                 print("ARAS: I don't know your name yet.")
 
-        elif user in ["bye", "exit", "quit"]:
+        elif user in farewells:
             print("ARAS: Goodbye! Have a great day 🚀")
             break
 
+        elif "time" in user:
+            current_time = datetime.datetime.now().strftime("%H:%M")
+            print(f"ARAS: The current time is {current_time}.")
+
         else:
-            print("ARAS: I'm still learning. Try something else!")
+            print(f"ARAS: {random.choice(responses['unknown'])}")
 
 # Start ARAS
 aras()
+```
