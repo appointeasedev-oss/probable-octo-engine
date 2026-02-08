@@ -5,7 +5,7 @@ import re
 import subprocess
 
 # ----------------- Config -----------------
-EXAMPLE_FILE = "ARAS/main.py"  # <-- AI edits this
+EXAMPLE_FILE = "ARAS/main.py"
 LOG_DIR = "logs"
 ERROR_DIR = "error_runs"
 COUNTER_FILE = "counter.txt"
@@ -98,13 +98,6 @@ def write_log(counter, summary):
     with open(log_file, "w") as f:
         f.write(summary)
 
-def extract_summary(ai_response):
-    text = ai_response['choices'][0]['message']['content']
-    summary_index = text.find("**Summary:**")
-    if summary_index != -1:
-        return text[summary_index:]
-    return "\n".join(text.splitlines()[-20:])
-
 def run_code():
     try:
         result = subprocess.run(
@@ -124,50 +117,54 @@ def main():
     current_code = read_example()
     previous_improvements = parse_previous_logs()
 
-    # Initial improvement prompt
+    # ---- Initial AI improvement prompt ----
     prompt = f"""
-You are an AI assistant improving Python code. Improve it so that when the user runs it, it is an interactive chat program with the user.
-Do not include any Markdown blocks or extra explanations in the code.
+You are an AI assistant improving Python code. 
+Your task: 
+1. Improve this Python code into a working interactive chat program.
+2. Return only valid Python code. Do NOT include explanations, Markdown, quotes, or any text outside the Python code.
+3. At the very end of the file, include a '**Summary:**' section as a Python comment block, listing:
+   - Improvements done
+   - Next improvements to consider
+
 Current code:
 {current_code}
 
 Previous improvements (do not repeat):
 {previous_improvements}
-
-Return only the full improved Python code and include a '**Summary:**' section listing:
-- Improvements done
-- Next improvements to consider
 """
 
     try:
-        # ---- First AI improvement ----
         response = call_openrouter(prompt)
         ai_text = response['choices'][0]['message']['content']
+
+        # Split code and summary
         summary_start = ai_text.find("**Summary:**")
         if summary_start != -1:
-            new_code = ai_text[:summary_start].strip()
+            new_code = ai_text[:summary_start].rstrip()
             summary = ai_text[summary_start:].strip()
         else:
             new_code = ai_text
-            summary = "**Summary:** No summary provided."
+            summary = "# **Summary:** No summary provided."
+
         write_example(new_code)
         write_log(counter, summary)
         print(f"Run {counter} complete. ARAS/main.py updated. Log saved as log_{counter}.txt")
 
-        # ---- Run and auto-fix loop ----
+        # ---- Run + auto-fix loop ----
         while True:
             returncode, stdout, stderr = run_code()
             if returncode == 0:
                 print("✅ ARAS/main.py runs without errors. Improvement successful!")
                 break
             else:
-                # Save the runtime error
+                # Save runtime error
                 error_log_file = os.path.join(ERROR_DIR, f"error_run_{counter}.txt")
                 with open(error_log_file, "w") as f:
                     f.write(stderr)
                 print(f"❌ Runtime error detected. Saved to {error_log_file}")
 
-                # Ask AI to fix the code
+                # Ask AI to fix code
                 fix_prompt = f"""
 The following Python code failed to run:
 {new_code}
@@ -175,22 +172,24 @@ The following Python code failed to run:
 Error message:
 {stderr}
 
-Please fix the code so it runs correctly as an interactive chat program and return the full corrected code.
-Do not include explanations or Markdown formatting in the code.
-Include a '**Summary:**' section listing:
-- Fixes applied
-- Next improvements to consider
+Your task: 
+- Fix the code so it runs correctly as an interactive chat program.
+- Return ONLY the fixed Python code (no Markdown, no explanations, no extra text).
+- At the end, include a '**Summary:**' section as a Python comment block, listing:
+  - Fixes applied
+  - Next improvements to consider
 """
                 print("Attempting AI auto-fix...")
                 response = call_openrouter(fix_prompt)
                 ai_text = response['choices'][0]['message']['content']
+
                 summary_start = ai_text.find("**Summary:**")
                 if summary_start != -1:
-                    new_code = ai_text[:summary_start].strip()
+                    new_code = ai_text[:summary_start].rstrip()
                     summary_fix = ai_text[summary_start:].strip()
                 else:
                     new_code = ai_text
-                    summary_fix = "**Summary:** AI fix applied, no summary."
+                    summary_fix = "# **Summary:** AI fix applied, no summary."
 
                 # Save fixed code and update log
                 write_example(new_code)
@@ -199,6 +198,7 @@ Include a '**Summary:**' section listing:
 
     except Exception as e:
         print(f"Brain run failed: {e}")
+
 
 if __name__ == "__main__":
     main()
