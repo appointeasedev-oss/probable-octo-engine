@@ -44,6 +44,15 @@
       "verification_success": true,
       "verification_stdout": "Verification passed.",
       "verification_stderr": ""
+    },
+    {
+      "run_id": 17,
+      "timestamp": "2026-02-08T16:15:46.889982",
+      "improvement_id": "add_greeting_variant",
+      "summary": "Response variant already present in greeting.",
+      "verification_success": true,
+      "verification_stdout": "Verification passed.",
+      "verification_stderr": ""
     }
   ]
 }
