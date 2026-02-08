@@ -1,0 +1,20 @@
+{
+  "greeting": [
+    "Hello there! 😊",
+    "Hi! How can I help you today? 😊",
+    "Hey! What's up? 😊"
+  ],
+  "name_introduction": [
+    "My name is ARAS.",
+    "I'm ARAS, nice to meet you!",
+    "You can call me ARAS."
+  ],
+  "unknown": [
+    "I'm still learning. Try something else!",
+    "I'm not sure about that yet. Can you ask something else?",
+    "Hmm, I don't know about that yet."
+  ],
+  "farewell": [
+    "Goodbye! Have a great day 🚀"
+  ]
+}

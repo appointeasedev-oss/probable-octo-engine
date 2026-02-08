@@ -1,0 +1,21 @@
+{
+  "greeting": [
+    "Hello there! \ud83d\ude0a",
+    "Hi! How can I help you today? \ud83d\ude0a",
+    "Hey! What's up? \ud83d\ude0a",
+    "Hello! I'm here to help you today. \ud83d\ude0a"
+  ],
+  "name_introduction": [
+    "My name is ARAS.",
+    "I'm ARAS, nice to meet you!",
+    "You can call me ARAS."
+  ],
+  "unknown": [
+    "I'm still learning. Try something else!",
+    "I'm not sure about that yet. Can you ask something else?",
+    "Hmm, I don't know about that yet."
+  ],
+  "farewell": [
+    "Goodbye! Have a great day \ud83d\ude80"
+  ]
+}
