@@ -1,4 +1,4 @@
-<code>
+```python
 # ARAS - A Really Awesome System 🤖
 import random
 import datetime
@@ -9,6 +9,11 @@ from typing import Optional, List, Dict
 import threading
 import queue
 from contextlib import contextmanager
+import logging
+from pathlib import Path
+
+# Initialize logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Helper functions for better modularity and testability
 def is_greeting(text: str) -> bool:
@@ -29,24 +34,36 @@ def contains_any(text: str, phrases: List[str]) -> bool:
 def contains_all(text: str, phrases: List[str]) -> bool:
     return all(q.lower() in text for q in phrases)
 
-# Predefined responses
-responses = {
-    "greeting": [
-        "Hello there! 😊",
-        "Hi! How can I help you today? 😊",
-        "Hey! What's up? 😊"
-    ],
-    "name_introduction": [
-        "My name is ARAS.",
-        "I'm ARAS, nice to meet you!",
-        "You can call me ARAS."
-    ],
-    "unknown": [
-        "I'm still learning. Try something else!",
-        "I'm not sure about that. Can you ask something else?",
-        "Hmm, I don't know about that yet."
-    ]
-}
+# Load configuration for customizable responses
+def load_config() -> Dict:
+    config_path = Path("aras_config.json")
+    if config_path.exists():
+        import json
+        with open(config_path, 'r') as f:
+            return json.load(f)
+    return {
+        "responses": {
+            "greeting": [
+                "Hello there! 😊",
+                "Hi! How can I help you today? 😊",
+                "Hey! What's up? 😊"
+            ],
+            "name_introduction": [
+                "My name is ARAS.",
+                "I'm ARAS, nice to meet you!",
+                "You can call me ARAS."
+            ],
+            "unknown": [
+                "I'm still learning. Try something else!",
+                "I'm not sure about that. Can you ask something else?",
+                "Hmm, I don't know about that yet."
+            ]
+        }
+    }
+
+# Predefined responses from config
+config = load_config()
+responses = config['responses']
 
 # Load the AI model with fallback
 def load_model() -> Optional:
@@ -55,7 +72,7 @@ def load_model() -> Optional:
         model = pipeline("conversational", model="microsoft/DialoGPT-medium")
         return model
     except ImportError:
-        print("Warning: transformers library not found. AI features will be disabled.")
+        logging.warning("transformers library not found. AI features will be disabled.")
         return None
 
 def get_time_response() -> str:
@@ -144,16 +161,4 @@ def aras():
 # Start ARAS
 if __name__ == "__main__":
     aras()
-</code>
-
-**Summary:**
-**Improvements done:**
-- Added `re.IGNORECASE` flag to regex searches in `is_greeting` and `is_farewell` functions for better case-insensitive matching
-- Minor code formatting improvements for consistency
-
-**Next improvements to consider:**
-- Add unit tests for helper functions
-- Implement conversation context persistence between sessions
-- Add more sophisticated NLP for intent recognition
-- Implement logging instead of print statements for better debugging
-- Add configuration file for customizable responses and behaviors
+```
