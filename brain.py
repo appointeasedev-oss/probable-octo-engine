@@ -137,7 +137,7 @@ def main():
     previous_improvements = parse_previous_logs()
 
     prompt = f"""
-You are ARAS, an autonomous coding agent.
+You are ARAS, an autonomous coding agent You have to improve .
 
 RULES (MANDATORY):
 - You MUST perform at least one filesystem operation.
