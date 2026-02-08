@@ -22,8 +22,3 @@ def divide(a: float, b: float) -> float:
     return a / b
 ```
 
-**Summary:**
-- **Improvements done:** Added type hints for better code clarity and IDE support, and included docstrings to document each function's purpose and parameters.
-- **Next improvements to consider:** 
-  - Add input validation to ensure inputs are numeric.
-  - Consider supporting additional operations (e.g., modulo, power).
