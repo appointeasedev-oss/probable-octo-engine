@@ -1,6 +1,7 @@
 ```python
-from typing import Union
+from typing import Union, Optional
 
+# Define a type alias for numbers supported by the library
 Number = Union[float, int]
 
 def add(a: Number, b: Number) -> Number:
@@ -19,10 +20,9 @@ def divide(a: Number, b: Number) -> Number:
     """Return the quotient of a and b.
 
     Raises:
-        ValueError: If b is zero.
+        ZeroDivisionError: If b is zero.
     """
-    if b == 0:
-        raise ValueError("Cannot divide by zero.")
+    # Let Python handle the native ZeroDivisionError for cleaner code
     return a / b
 
 def power(base: Number, exponent: Number) -> Number:
@@ -33,13 +33,13 @@ def modulo(dividend: Number, divisor: Number) -> Number:
     """Return the remainder of dividend divided by divisor.
 
     Raises:
-        ValueError: If divisor is zero.
+        ZeroDivisionError: If divisor is zero.
     """
-    if divisor == 0:
-        raise ValueError("Cannot perform modulo by zero.")
+    # Let Python handle the native ZeroDivisionError
     return dividend % divisor
 
-# Improvements
+# --- Utility and Safe Operations ---
+
 def is_number(value: object) -> bool:
     """Check if a value is a number (int or float)."""
     return isinstance(value, (int, float))
@@ -49,13 +49,13 @@ def validate_number(value: object, name: str) -> None:
     if not is_number(value):
         raise TypeError(f"{name} must be a number, got {type(value).__name__}.")
 
-def safe_divide(a: Number, b: Number) -> Number:
+def safe_divide(a: Number, b: Number) -> Optional[Number]:
     """Return the quotient of a and b, returning None if b is zero."""
     if b == 0:
         return None
     return a / b
 
-def safe_modulo(dividend: Number, divisor: Number) -> Number:
+def safe_modulo(dividend: Number, divisor: Number) -> Optional[Number]:
     """Return the remainder of dividend divided by divisor, returning None if divisor is zero."""
     if divisor == 0:
         return None
