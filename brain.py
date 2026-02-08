@@ -14,8 +14,10 @@ LOG_DIR = "logs"
 SNAPSHOT_DIR = "snapshots"
 COUNTER_FILE = "counter.txt"
 MODEL_NAME = "arcee-ai/trinity-large-preview:free"
-
-MAX_RETRIES = 4
+# Max time to run main.py or tests
+RUN_TIMEOUT = 15
+# Sleep between retries
+RETRY_DELAY = 2
 # =========================================
 
 OPENROUTER_KEYS = [
@@ -97,31 +99,37 @@ def apply_diff(path, diff_text):
         with open(file_path) as f:
             old = f.readlines()
 
-    diff = list(difflib.unified_diff(old, diff_text.splitlines(keepends=True)))
-    new = []
-    for line in diff:
-        if line.startswith("+") and not line.startswith("+++"):
-            new.append(line[1:])
-        elif line.startswith(" ") or line.startswith("@"):
-            continue
-        elif line.startswith("-"):
-            continue
+    # Apply unified diff manually
+    patch_lines = difflib.unified_diff(old, diff_text.splitlines(keepends=True))
+    new = list(difflib.restore(list(patch_lines), 1))
 
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-    with open(file_path, "w") as f:
-        f.writelines(new)
+    if new != old:
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, "w") as f:
+            f.writelines(new)
+        return True
+    return False
 
 def run_main():
     try:
-        subprocess.check_output(["python", os.path.join(ARAS_ROOT, "main.py")],
-                                stderr=subprocess.STDOUT, timeout=10)
+        subprocess.check_output(
+            ["python", os.path.join(ARAS_ROOT, "main.py")],
+            stderr=subprocess.STDOUT, timeout=RUN_TIMEOUT
+        )
         return True, ""
     except subprocess.CalledProcessError as e:
         return False, e.output.decode()
+    except Exception as e:
+        return False, str(e)
 
 def run_tests():
+    if not os.path.exists(os.path.join(ARAS_ROOT, "tests")):
+        return True, ""
     try:
-        subprocess.check_output(["pytest"], stderr=subprocess.STDOUT, timeout=20)
+        subprocess.check_output(
+            ["pytest", ARAS_ROOT],
+            stderr=subprocess.STDOUT, timeout=RUN_TIMEOUT
+        )
         return True, ""
     except Exception as e:
         return False, str(e)
@@ -135,6 +143,16 @@ def extract_json(text):
             return json.loads(m.group())
     raise ValueError("Invalid JSON")
 
+def parse_previous_logs():
+    done = set()
+    if not os.path.exists(LOG_DIR):
+        return done
+    for log in os.listdir(LOG_DIR):
+        with open(os.path.join(LOG_DIR, log)) as f:
+            for m in re.findall(r"- Improvements done: (.+)", f.read()):
+                done.add(m.strip())
+    return done
+
 def write_log(counter, text):
     with open(os.path.join(LOG_DIR, f"log_{counter}.txt"), "w") as f:
         f.write(text)
@@ -144,27 +162,31 @@ def main():
     ensure_env()
     counter = read_counter() + 1
     snap = snapshot(counter)
-
     workspace = read_workspace()
+    memory = parse_previous_logs()
 
     base_prompt = f"""
-You are ARAS, a real autonomous coding agent.
+You are ARAS, an autonomous coding agent.
 
 LONG-TERM GOALS:
-- Improve structure and reliability
-- Increase test coverage
-- Reduce runtime errors
-- Improve maintainability
+- Always improve ARAS folder
+- Modularize and refactor code
+- Ensure main.py runs
+- Add or improve tests if present
+- Accumulate improvements without repeating past work
 
 RULES:
-- You MUST plan first.
-- You MUST apply at least one diff.
-- You MUST keep code runnable.
-- Use DIFFS only.
-- Output ONLY valid JSON.
+- Return ONLY valid JSON
+- Plan before executing
+- Use diff if possible, fallback to full file overwrite if necessary
+- At least one file must be changed
+- main.py must run successfully
 
 Workspace:
 {json.dumps(workspace, indent=2)}
+
+Previous improvements (do not repeat):
+{memory}
 
 JSON FORMAT:
 {{
@@ -172,42 +194,59 @@ JSON FORMAT:
   "diffs": [
     {{
       "path": "relative/path.py",
-      "diff": "unified diff text"
+      "diff": "unified diff or full content"
     }}
   ],
   "summary": "**Summary:**\\n- Improvements done: ...\\n- Next improvements to consider: ..."
 }}
 """
 
-    error = ""
-    for attempt in range(MAX_RETRIES):
-        prompt = base_prompt + (f"\nERROR TO FIX:\n{error}" if error else "")
+    last_error = ""
+    while True:  # Loop until success
+        prompt = base_prompt + (f"\nERROR TO FIX:\n{last_error}" if last_error else "")
         response = call_openrouter(prompt)
-        data = extract_json(response["choices"][0]["message"]["content"])
-
+        ai_text = response["choices"][0]["message"]["content"]
         try:
-            for d in data["diffs"]:
-                apply_diff(d["path"], d["diff"])
+            data = extract_json(ai_text)
+            changes_applied = False
 
+            # Apply diffs or full file writes
+            for d in data.get("diffs", []):
+                applied = apply_diff(d["path"], d["diff"])
+                changes_applied = changes_applied or applied
+
+            if not changes_applied:
+                last_error = "No file changes applied. Retrying..."
+                time.sleep(RETRY_DELAY)
+                rollback(snap)
+                continue
+
+            # Run main.py
             ok, err = run_main()
             if not ok:
-                raise RuntimeError(err)
+                last_error = f"main.py failed: {err}"
+                time.sleep(RETRY_DELAY)
+                rollback(snap)
+                continue
 
-            if os.path.exists("tests"):
-                ok, err = run_tests()
-                if not ok:
-                    raise RuntimeError(err)
+            # Run tests
+            ok, err = run_tests()
+            if not ok:
+                last_error = f"Tests failed: {err}"
+                time.sleep(RETRY_DELAY)
+                rollback(snap)
+                continue
 
+            # Success
             write_counter(counter)
-            write_log(counter, data["summary"])
-            print(f"ARAS run {counter} complete.")
+            write_log(counter, data.get("summary", "**Summary:** No summary provided"))
+            print(f"ARAS run {counter} complete. Improvements applied successfully.")
             return
 
         except Exception as e:
+            last_error = str(e)
+            time.sleep(RETRY_DELAY)
             rollback(snap)
-            error = str(e)
-
-    raise RuntimeError("ARAS failed after max retries")
 
 if __name__ == "__main__":
     main()
