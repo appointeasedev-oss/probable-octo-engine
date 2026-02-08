@@ -5,7 +5,6 @@ import re
 import json
 import shutil
 import subprocess
-import difflib
 import time
 from pathlib import Path
 from datetime import datetime
@@ -140,14 +139,21 @@ def get_all_files(folder):
 # ---------------- PROJECT METRICS ----------------
 def update_metrics(file_path, success=True):
     metrics = {}
+    # Safe loading
     if os.path.exists(METRICS_FILE):
-        with open(METRICS_FILE, "r", encoding="utf-8") as f:
-            metrics = json.load(f)
+        try:
+            with open(METRICS_FILE, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                if content:
+                    metrics = json.loads(content)
+        except json.JSONDecodeError:
+            metrics = {}
+            write_file(METRICS_FILE, json.dumps(metrics, indent=2))
     file_metrics = metrics.get(file_path, {"improvements":0,"failures":0})
     if success:
-        file_metrics["improvements"] +=1
+        file_metrics["improvements"] += 1
     else:
-        file_metrics["failures"] +=1
+        file_metrics["failures"] += 1
     metrics[file_path] = file_metrics
     write_file(METRICS_FILE, json.dumps(metrics, indent=2))
 
@@ -156,8 +162,10 @@ def test_aras_conversation():
     test_file = os.path.join(TEST_LOG_DIR, "conversation.json")
     conversation = []
     if os.path.exists(test_file):
-        with open(test_file, "r", encoding="utf-8") as f:
-            conversation = json.load(f)
+        try:
+            conversation = json.load(open(test_file,"r",encoding="utf-8"))
+        except:
+            conversation = []
     test_message = f"Test message at run {read_counter()}"
     try:
         response = call_multi_model(f"Simulate ARAS AI conversation. User: {test_message}")
@@ -221,7 +229,7 @@ def improve_aras_files():
         prev_improvements = parse_previous_logs(file_path)
         all_files_paths = get_all_files(ARAS_FOLDER)
         prompt = f"""
-You are an autonomous AI agent improving/building ARAS AI project.
+You are an autonomous AI agent improving/building ARAS AI project ita a new AI that you have to make more powerfull and cit can runn from its start file as chat.
 Project files: {all_files_paths}
 Current file: {file_path}
 Current code:
@@ -230,13 +238,12 @@ Last {MAX_PREV_IMPROVEMENTS} improvements for this file:
 {prev_improvements}
 
 Task:
-- Improve this file as part of ARAS AI system.
+- Improve ARAS.
 - Can create new files/subfolders and update existing files.
 - Apply one meaningful improvement per run.
 - Generate unit tests and update integration tests.
 - Update project metrics.
-- Return full updated code and summary starting with '**Summary:**'.
-"""
+- Return full updated code and summary starting with '**Summary:**'."""
         try:
             response = call_multi_model(prompt)
             ai_text = response['choices'][0]['message']['content']
